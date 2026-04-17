@@ -1453,21 +1453,34 @@ function switchTo(id) {
 let ANTHROPIC_API_KEY = localStorage.getItem('tj_apikey') || '';
 
 function saveApiKey() {
-  const v = (document.getElementById('api-key-input') || document.getElementById('api-key-config')).value.trim();
-  if (v.startsWith('sk-ant-') || v.startsWith('sk-')) {
-    ANTHROPIC_API_KEY = v;
-    localStorage.setItem('tj_apikey', v);
-    document.getElementById('sp-ai').className = 'status-pill sp-live';
-    document.getElementById('sp-ai').querySelector('.dot').style.background = 'var(--green)';
-    // update both inputs
-    if (document.getElementById('api-key-input')) document.getElementById('api-key-input').value = '';
-    if (document.getElementById('api-key-config')) document.getElementById('api-key-config').value = '';
-    document.getElementById('sentinel-setup').style.display = 'none';
-    document.getElementById('sentinel-active').style.display = 'block';
-    alert('✓ API key zapisany! Sentinel aktywny.');
-  } else {
-    alert('Nieprawidłowy klucz. Musi zaczynać się od sk-ant- lub sk-');
+  // Try both inputs
+  const inp1 = document.getElementById('api-key-input');
+  const inp2 = document.getElementById('api-key-config');
+  const v = (inp1 && inp1.value.trim()) || (inp2 && inp2.value.trim()) || '';
+  
+  if (v.length < 10) {
+    alert('Wklej klucz API w pole powyżej (zaczyna się od sk-ant-)');
+    return;
   }
+  
+  ANTHROPIC_API_KEY = v;
+  localStorage.setItem('tj_apikey', v);
+  
+  // Update status pill
+  const spAi = document.getElementById('sp-ai');
+  if (spAi) { spAi.className = 'status-pill sp-live'; }
+  
+  // Clear inputs
+  if (inp1) inp1.value = '';
+  if (inp2) inp2.value = '';
+  
+  // Show sentinel active
+  const setup = document.getElementById('sentinel-setup');
+  const active = document.getElementById('sentinel-active');
+  if (setup) setup.style.display = 'none';
+  if (active) active.style.display = 'block';
+  
+  alert('✓ Klucz API zapisany! Sentinel aktywny. Przejdź do zakładki Sentinel i kliknij Uruchom.');
 }
 
 // on load check key
