@@ -1503,10 +1503,11 @@ async function callClaude(systemPrompt, userMsg, maxTokens = 1200) {
   if (!ANTHROPIC_API_KEY) {
     throw new Error('Brak klucza API. Skonfiguruj go w zakładce Config.');
   }
-  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+  const resp = await fetch('https://trejdovo-api.malin0988.workers.dev', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
+      apiKey: ANTHROPIC_API_KEY,
       model: 'claude-sonnet-4-20250514',
       max_tokens: maxTokens,
       system: systemPrompt,
@@ -1772,10 +1773,11 @@ async function analyzeScreenshot(input) {
     const mtype = file.type;
 
     try {
-      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      const resp = await fetch('https://trejdovo-api.malin0988.workers.dev', {
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify({
+          apiKey: ANTHROPIC_API_KEY,
           model:'claude-sonnet-4-20250514',
           max_tokens:500,
           system: SCREENSHOT_SYSTEM,
