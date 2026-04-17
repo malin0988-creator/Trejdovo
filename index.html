@@ -1,0 +1,1938 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#060910">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>TREJDOVO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Instrument+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:     #060910;
+  --bg2:    #0a0e18;
+  --bg3:    #0f1520;
+  --card:   #111927;
+  --card2:  #162033;
+  --border: #1c2a3e;
+  --b2:     #243348;
+  --b3:     #2e4160;
+  --text:   #dde4f0;
+  --t2:     #7a8eaa;
+  --t3:     #3d5070;
+  --cyan:   #00c8e8;
+  --cyan2:  #0099b8;
+  --green:  #00d97e;
+  --red:    #ff3d55;
+  --amber:  #ffaa00;
+  --gold:   #f5c842;
+  --purple: #8b7cf8;
+  --orange: #ff6b35;
+  --mono:   'IBM Plex Mono', monospace;
+  --sans:   'Instrument Sans', sans-serif;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bot: env(safe-area-inset-bottom, 0px);
+}
+
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+
+html { height: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  min-height: 100%;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* SCANLINE EFFECT */
+body::after {
+  content:'';
+  position:fixed; inset:0;
+  background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,200,232,0.012) 2px, rgba(0,200,232,0.012) 4px);
+  pointer-events:none;
+  z-index:9999;
+}
+
+/* GRID */
+body::before {
+  content:'';
+  position:fixed; inset:0;
+  background-image:
+    linear-gradient(rgba(0,200,232,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,200,232,0.025) 1px, transparent 1px);
+  background-size: 32px 32px;
+  pointer-events:none;
+  z-index:0;
+}
+
+.shell {
+  position:relative; z-index:1;
+  max-width: 430px;
+  margin: 0 auto;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding-top: var(--safe-top);
+}
+
+/* ─── HEADER ─── */
+.hdr {
+  display:flex; align-items:center; justify-content:space-between;
+  padding: 12px 18px 10px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(6,9,16,0.97);
+  backdrop-filter: blur(16px);
+  position: sticky; top:0; z-index:100;
+}
+
+.logo {
+  font-family: var(--mono);
+  font-size: 16px; font-weight:700;
+  letter-spacing: 3px;
+  color: var(--text);
+}
+.logo b { color: var(--cyan); }
+
+.hdr-right { text-align:right; }
+.hdr-clock {
+  font-family: var(--mono);
+  font-size: 15px; font-weight:600;
+  color: var(--cyan);
+  line-height:1;
+}
+.hdr-date {
+  font-size: 10px; color: var(--t3);
+  font-family: var(--mono);
+  margin-top: 2px;
+}
+
+/* ─── STATUS BAR ─── */
+.status-bar {
+  display:flex; gap:6px; padding: 8px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg2);
+  overflow-x:auto; scrollbar-width:none;
+}
+.status-bar::-webkit-scrollbar { display:none; }
+
+.status-pill {
+  display:flex; align-items:center; gap:5px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 10px; font-weight:600;
+  white-space:nowrap; flex-shrink:0;
+  cursor:pointer;
+}
+.status-pill .dot {
+  width:5px; height:5px; border-radius:50%;
+}
+.sp-live { border-color: rgba(0,217,126,0.3); color:var(--green); }
+.sp-live .dot { background:var(--green); animation: blink 1.5s infinite; }
+.sp-warn { border-color: rgba(255,170,0,0.3); color:var(--amber); }
+.sp-warn .dot { background:var(--amber); }
+.sp-alert { border-color: rgba(255,61,85,0.3); color:var(--red); }
+.sp-alert .dot { background:var(--red); animation: blink 0.8s infinite; }
+.sp-off { border-color: var(--border); color:var(--t3); }
+.sp-off .dot { background:var(--t3); }
+
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+/* ─── NAV ─── */
+.nav {
+  display:flex; gap:0;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  overflow-x:auto; scrollbar-width:none;
+}
+.nav::-webkit-scrollbar { display:none; }
+
+.nb {
+  font-family: var(--mono);
+  font-size: 10px; font-weight:600;
+  padding: 10px 14px;
+  border:none; background:transparent;
+  color: var(--t3);
+  cursor:pointer;
+  white-space:nowrap;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+.nb:hover { color: var(--t2); }
+.nb.on { color:var(--cyan); border-bottom-color:var(--cyan); }
+
+/* ─── CONTENT ─── */
+.content { flex:1; padding:14px; overflow-y:auto; padding-bottom:80px; }
+.sec { display:none; }
+.sec.on { display:block; }
+
+/* ─── API KEY SETUP ─── */
+.setup-card {
+  background: var(--card);
+  border: 1px solid var(--b2);
+  border-top: 3px solid var(--cyan);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 14px;
+}
+.setup-title {
+  font-family: var(--mono);
+  font-size: 12px; font-weight:700;
+  color: var(--cyan);
+  letter-spacing: 1px;
+  margin-bottom: 8px;
+}
+.setup-desc {
+  font-size: 12px; color:var(--t2);
+  line-height: 1.6; margin-bottom: 14px;
+}
+.setup-desc a { color:var(--cyan); text-decoration:none; }
+
+/* ─── CARDS ─── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+}
+
+.card-hdr {
+  display:flex; align-items:center; justify-content:space-between;
+  margin-bottom: 12px;
+}
+
+.card-label {
+  font-family: var(--mono);
+  font-size: 9px; font-weight:700;
+  letter-spacing: 1.5px; text-transform:uppercase;
+  color: var(--t3);
+}
+
+/* ─── BADGES ─── */
+.badge {
+  font-family: var(--mono);
+  font-size: 9px; font-weight:700;
+  padding: 3px 8px; border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+.b-bull { background:rgba(0,217,126,0.1); color:var(--green); }
+.b-bear { background:rgba(255,61,85,0.1); color:var(--red); }
+.b-neut { background:rgba(255,170,0,0.1); color:var(--amber); }
+.b-live { background:rgba(0,200,232,0.1); color:var(--cyan); }
+.b-off  { background:rgba(61,80,112,0.2); color:var(--t3); }
+.b-warn { background:rgba(255,107,53,0.1); color:var(--orange); }
+
+/* ─── INSTRUMENT BARS ─── */
+.inst-row {
+  display:flex; align-items:center; gap:10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  cursor:pointer;
+  transition: background 0.1s;
+}
+.inst-row:last-child { border-bottom:none; }
+.inst-row:hover { margin: 0 -16px; padding: 9px 16px; background: rgba(0,200,232,0.03); }
+
+.inst-ico {
+  width:34px; height:34px; border-radius:8px;
+  display:flex; align-items:center; justify-content:center;
+  font-family:var(--mono); font-size:11px; font-weight:700;
+  flex-shrink:0;
+}
+.i-nq  { background:rgba(0,200,232,0.1); color:var(--cyan); }
+.i-cl  { background:rgba(255,170,0,0.1); color:var(--amber); }
+.i-btc { background:rgba(245,200,66,0.1); color:var(--gold); }
+.i-xau { background:rgba(255,170,0,0.12); color:#ffd700; }
+
+.inst-info { flex:1; min-width:0; }
+.inst-name { font-family:var(--mono); font-size:13px; font-weight:700; }
+.inst-sub  { font-size:10px; color:var(--t3); margin-top:1px; }
+
+.inst-right { text-align:right; }
+.inst-sent  { font-size:10px; font-weight:700; padding:3px 8px; border-radius:5px; font-family:var(--mono); }
+.sent-bull  { background:rgba(0,217,126,0.08); color:var(--green); }
+.sent-bear  { background:rgba(255,61,85,0.08); color:var(--red); }
+.sent-neut  { background:rgba(255,170,0,0.08); color:var(--amber); }
+.inst-note  { font-size:10px; color:var(--t3); margin-top:3px; }
+
+/* ─── SENTINEL ALERT ─── */
+.sentinel-alert {
+  background: linear-gradient(135deg, rgba(255,61,85,0.06), rgba(255,107,53,0.04));
+  border: 1px solid rgba(255,61,85,0.2);
+  border-left: 3px solid var(--red);
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+.sentinel-alert.warn {
+  background: linear-gradient(135deg, rgba(255,170,0,0.06), rgba(255,170,0,0.03));
+  border-color: rgba(255,170,0,0.2);
+  border-left-color: var(--amber);
+}
+.sentinel-alert.ok {
+  background: linear-gradient(135deg, rgba(0,217,126,0.06), rgba(0,217,126,0.03));
+  border-color: rgba(0,217,126,0.2);
+  border-left-color: var(--green);
+}
+
+.sent-hdr {
+  display:flex; align-items:center; gap:8px;
+  margin-bottom: 6px;
+}
+.sent-ico { font-size:14px; }
+.sent-title {
+  font-family: var(--mono);
+  font-size: 10px; font-weight:700;
+  letter-spacing: 0.5px;
+  color: var(--red);
+}
+.sentinel-alert.warn .sent-title { color:var(--amber); }
+.sentinel-alert.ok .sent-title { color:var(--green); }
+.sent-time { margin-left:auto; font-family:var(--mono); font-size:9px; color:var(--t3); }
+
+.sent-body { font-size: 12px; line-height:1.65; color:var(--t2); }
+.sent-body strong { color:var(--text); font-weight:500; }
+.sent-inst {
+  display:flex; gap:5px; margin-top:8px; flex-wrap:wrap;
+}
+.sent-tag {
+  font-family:var(--mono); font-size:9px; font-weight:700;
+  padding:2px 7px; border-radius:4px;
+}
+
+/* ─── REPORT BLOCK ─── */
+.report-block {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 12px;
+  overflow:hidden;
+}
+.report-time-hdr {
+  padding:10px 16px;
+  border-bottom: 1px solid var(--border);
+  display:flex; align-items:center; justify-content:space-between;
+  background: var(--bg3);
+}
+.rtl { font-family:var(--mono); font-size:12px; font-weight:700; color:var(--cyan); }
+.rts { font-size:10px; color:var(--t3); margin-top:2px; }
+
+.report-table {
+  width:100%;
+  border-collapse: collapse;
+}
+.report-table th {
+  font-family:var(--mono); font-size:9px; font-weight:700;
+  color:var(--t3); letter-spacing:0.8px; text-transform:uppercase;
+  padding:8px 12px;
+  text-align:left;
+  border-bottom: 1px solid var(--border);
+  background:var(--bg3);
+}
+.report-table td {
+  padding: 9px 12px;
+  font-size:11px; color:var(--t2);
+  line-height:1.55;
+  vertical-align:top;
+  border-bottom: 1px solid var(--border);
+}
+.report-table tr:last-child td { border-bottom:none; }
+.report-table tr:hover td { background:rgba(0,200,232,0.02); }
+
+.rt-inst {
+  font-family:var(--mono); font-size:11px; font-weight:700;
+  display:flex; align-items:center; gap:6px;
+}
+.rt-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+
+.report-narrative {
+  padding:14px 16px;
+  font-size:12px; line-height:1.7; color:var(--t2);
+  border-bottom: 1px solid var(--border);
+}
+.report-narrative strong { color:var(--text); font-weight:500; }
+.report-narrative em { color:var(--amber); font-style:normal; }
+
+.report-pending {
+  padding: 20px;
+  text-align:center;
+  color:var(--t3);
+  font-size:12px;
+}
+.report-pending .pend-time {
+  font-family:var(--mono); font-size:22px; font-weight:700;
+  color:var(--b3); margin-bottom:4px;
+}
+
+/* ─── AI GENERATING ─── */
+.ai-gen {
+  display:flex; align-items:center; gap:10px;
+  padding:14px;
+  font-size:12px; color:var(--t2);
+}
+.ai-spinner {
+  width:16px; height:16px;
+  border:2px solid var(--border);
+  border-top-color:var(--cyan);
+  border-radius:50%;
+  animation: spin 0.8s linear infinite;
+  flex-shrink:0;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ─── NEWS ─── */
+.news-item {
+  display:flex; gap:10px; align-items:flex-start;
+  padding:10px 0;
+  border-bottom:1px solid var(--border);
+}
+.news-item:last-child { border-bottom:none; }
+.news-dot { width:6px; height:6px; border-radius:50%; flex-shrink:0; margin-top:4px; }
+.news-hl { font-size:12px; font-weight:500; color:var(--text); line-height:1.45; margin-bottom:4px; }
+.news-meta {
+  display:flex; gap:8px; align-items:center;
+  font-family:var(--mono); font-size:9px; color:var(--t3);
+}
+.ni-high { background:rgba(255,61,85,0.12); color:var(--red); padding:2px 5px; border-radius:3px; font-weight:700; }
+.ni-med  { background:rgba(255,170,0,0.12); color:var(--amber); padding:2px 5px; border-radius:3px; font-weight:700; }
+.ni-low  { background:rgba(61,80,112,0.2); color:var(--t2); padding:2px 5px; border-radius:3px; }
+.news-move-up   { color:var(--green); font-weight:700; }
+.news-move-down { color:var(--red); font-weight:700; }
+
+/* ─── CALENDAR ─── */
+.cal-row {
+  display:flex; align-items:center; gap:12px;
+  padding:9px 0;
+  border-bottom:1px solid var(--border);
+}
+.cal-row:last-child { border-bottom:none; }
+.cal-time {
+  font-family:var(--mono); font-size:11px; font-weight:700;
+  min-width:38px; color:var(--cyan);
+}
+.cal-time.past { color:var(--t3); }
+.cal-time.alert { color:var(--red); }
+.cal-bar { width:3px; border-radius:2px; height:34px; flex-shrink:0; }
+.cb-h { background:var(--red); }
+.cb-m { background:var(--amber); }
+.cb-l { background:var(--t3); }
+.cal-info { flex:1; }
+.cal-name { font-size:12px; font-weight:500; color:var(--text); margin-bottom:3px; }
+.cal-vals {
+  display:flex; gap:10px;
+  font-family:var(--mono); font-size:10px; color:var(--t3);
+}
+.cv-actual { font-weight:700; }
+.cv-beat { color:var(--green); }
+.cv-miss { color:var(--red); }
+
+/* ─── TRADE CARD ─── */
+.trade-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 10px;
+  overflow:hidden;
+  transition: border-color 0.15s;
+}
+.trade-card:hover { border-color:var(--b2); }
+
+.tc-hdr {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 14px;
+  border-bottom:1px solid var(--border);
+  background:var(--bg3);
+}
+.tc-left { display:flex; align-items:center; gap:8px; }
+.tc-name { font-family:var(--mono); font-size:13px; font-weight:700; }
+.tc-dir  { font-size:9px; font-weight:700; padding:3px 7px; border-radius:4px; font-family:var(--mono); }
+.dir-l { background:rgba(0,217,126,0.1); color:var(--green); }
+.dir-s { background:rgba(255,61,85,0.1); color:var(--red); }
+.tc-pnl { font-family:var(--mono); font-size:15px; font-weight:700; }
+.pnl-p { color:var(--green); }
+.pnl-n { color:var(--red); }
+
+.tc-grid {
+  display:grid; grid-template-columns:repeat(3,1fr); gap:0;
+  border-bottom:1px solid var(--border);
+}
+.tc-stat {
+  padding:9px 12px;
+  border-right:1px solid var(--border);
+}
+.tc-stat:nth-child(3n) { border-right:none; }
+.tc-sl { font-size:9px; color:var(--t3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:3px; }
+.tc-sv { font-size:11px; font-family:var(--mono); font-weight:500; }
+
+.tc-note {
+  padding:10px 14px;
+  font-size:11px; color:var(--t2);
+  line-height:1.6; font-style:italic;
+  border-bottom:1px solid var(--border);
+}
+
+/* ─── POST MORTEM ─── */
+.post-mortem {
+  background: rgba(139,124,248,0.04);
+  border-top: 1px solid rgba(139,124,248,0.15);
+}
+.pm-hdr {
+  display:flex; align-items:center; gap:7px;
+  padding:9px 14px 7px;
+}
+.pm-dot { width:6px; height:6px; border-radius:50%; background:var(--purple); animation:blink 2s infinite; }
+.pm-label { font-family:var(--mono); font-size:9px; font-weight:700; color:var(--purple); letter-spacing:1px; text-transform:uppercase; }
+.pm-body {
+  padding:0 14px 12px;
+  font-size:11px; color:var(--t2); line-height:1.65;
+}
+.pm-body strong { color:var(--text); font-weight:500; }
+.pm-body .pm-verdict {
+  display:inline-block;
+  margin-top:8px;
+  padding:4px 10px;
+  border-radius:5px;
+  font-family:var(--mono); font-size:9px; font-weight:700;
+  background:rgba(255,61,85,0.1); color:var(--red);
+}
+.pm-verdict.good { background:rgba(0,217,126,0.1); color:var(--green); }
+
+/* ─── SCREENSHOT UPLOAD ─── */
+.upload-zone {
+  border:2px dashed var(--b2);
+  border-radius:10px;
+  padding:16px;
+  text-align:center;
+  cursor:pointer;
+  transition:all 0.15s;
+  margin:0 14px 12px;
+}
+.upload-zone:hover { border-color:var(--cyan); background:rgba(0,200,232,0.03); }
+.upload-zone p { font-size:11px; color:var(--t2); margin-top:4px; }
+.upload-zone small { font-size:10px; color:var(--t3); }
+
+/* ─── STATS ─── */
+.stats-grid {
+  display:grid; grid-template-columns:1fr 1fr;
+  gap:10px; margin-bottom:12px;
+}
+.stat-box {
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:12px;
+  padding:14px;
+}
+.sb-label { font-size:9px; color:var(--t3); font-family:var(--mono); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:6px; }
+.sb-val { font-size:22px; font-weight:700; font-family:var(--mono); line-height:1; }
+.sb-sub { font-size:10px; color:var(--t3); margin-top:4px; }
+
+/* ─── WATCHLIST ─── */
+.wl-grid { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; }
+.wl-card {
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:12px; padding:14px;
+  cursor:pointer; transition:border-color 0.15s;
+  position:relative; overflow:hidden;
+}
+.wl-card::before {
+  content:'';
+  position:absolute; left:0; top:0; bottom:0;
+  width:3px; background:var(--border);
+  transition:background 0.15s;
+}
+.wl-card.active { border-color:var(--b3); }
+.wl-card.active::before { background:var(--cyan); }
+.wl-card:hover { border-color:var(--b2); }
+.wl-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; }
+.wl-sym { font-family:var(--mono); font-size:13px; font-weight:700; }
+.wl-chg { font-family:var(--mono); font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; }
+.chg-p { background:rgba(0,217,126,0.08); color:var(--green); }
+.chg-n { background:rgba(255,61,85,0.08); color:var(--red); }
+.wl-price { font-family:var(--mono); font-size:17px; font-weight:700; margin-bottom:2px; }
+.wl-name { font-size:10px; color:var(--t3); }
+
+/* ─── SETTINGS ─── */
+.set-row {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:11px 0;
+  border-bottom:1px solid var(--border);
+}
+.set-row:last-child { border-bottom:none; }
+.set-label { font-size:13px; font-weight:500; }
+.set-sub { font-size:10px; color:var(--t3); margin-top:2px; }
+.set-right { display:flex; align-items:center; gap:8px; }
+
+.toggle {
+  position:relative; width:40px; height:22px; flex-shrink:0;
+}
+.toggle input { display:none; }
+.tg-track {
+  position:absolute; inset:0;
+  background:var(--b2); border-radius:11px;
+  cursor:pointer; transition:background 0.2s;
+}
+.toggle input:checked + .tg-track { background:var(--cyan2); }
+.tg-thumb {
+  position:absolute;
+  width:16px; height:16px;
+  background:white; border-radius:50%;
+  top:3px; left:3px;
+  transition:transform 0.2s;
+  pointer-events:none;
+}
+.toggle input:checked ~ .tg-thumb { transform:translateX(18px); }
+
+/* ─── MODAL ─── */
+.overlay {
+  position:fixed; inset:0;
+  background:rgba(0,0,0,0.75);
+  backdrop-filter:blur(6px);
+  z-index:500;
+  display:flex; align-items:flex-end; justify-content:center;
+  opacity:0; pointer-events:none;
+  transition:opacity 0.2s;
+}
+.overlay.open { opacity:1; pointer-events:all; }
+
+.modal {
+  width:100%; max-width:430px;
+  background:var(--bg2);
+  border:1px solid var(--b2);
+  border-radius:20px 20px 0 0;
+  padding:20px 20px calc(20px + var(--safe-bot));
+  transform:translateY(100%);
+  transition:transform 0.25s cubic-bezier(0.34,1.56,0.64,1);
+  max-height:92vh;
+  overflow-y:auto;
+}
+.overlay.open .modal { transform:translateY(0); }
+
+.modal-title {
+  font-family:var(--mono); font-size:13px; font-weight:700;
+  color:var(--text); margin-bottom:16px;
+  display:flex; justify-content:space-between; align-items:center;
+}
+.m-close {
+  background:var(--border); border:none; color:var(--t2);
+  width:26px; height:26px; border-radius:50%;
+  cursor:pointer; font-size:14px;
+  display:flex; align-items:center; justify-content:center;
+}
+
+.form-lbl { font-size:9px; font-family:var(--mono); color:var(--t3); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:6px; display:block; }
+.form-grp { margin-bottom:12px; }
+.form-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+
+.f-input, .f-sel, .f-area {
+  width:100%; background:var(--bg3);
+  border:1px solid var(--border); border-radius:8px;
+  padding:10px 12px;
+  font-size:12px; font-family:var(--mono); color:var(--text);
+  outline:none; transition:border-color 0.15s;
+  appearance:none;
+}
+.f-input:focus, .f-sel:focus, .f-area:focus { border-color:var(--cyan); }
+.f-area { resize:none; height:72px; font-family:var(--sans); font-size:12px; }
+
+.dir-btns { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.dir-btn {
+  padding:10px;
+  border-radius:8px; border:1px solid var(--border);
+  background:transparent; color:var(--t2);
+  font-family:var(--mono); font-size:12px; font-weight:700;
+  cursor:pointer; transition:all 0.15s; text-align:center;
+}
+.dir-btn.sel-l { background:rgba(0,217,126,0.1); border-color:var(--green); color:var(--green); }
+.dir-btn.sel-s { background:rgba(255,61,85,0.1); border-color:var(--red); color:var(--red); }
+
+.btn-primary {
+  width:100%; background:var(--cyan);
+  color:var(--bg); border:none; border-radius:10px;
+  padding:13px; font-size:12px; font-weight:700;
+  font-family:var(--mono); cursor:pointer;
+  transition:all 0.15s; letter-spacing:1px;
+  text-transform:uppercase; margin-top:6px;
+}
+.btn-primary:hover { background:var(--cyan2); transform:translateY(-1px); }
+.btn-primary:disabled { background:var(--b2); color:var(--t3); cursor:not-allowed; transform:none; }
+
+/* ─── FAB ─── */
+.fab {
+  position:fixed; bottom:calc(24px + var(--safe-bot)); right:20px;
+  width:50px; height:50px; border-radius:50%;
+  background:var(--cyan); color:var(--bg);
+  border:none; font-size:22px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  box-shadow:0 4px 20px rgba(0,200,232,0.35);
+  z-index:200; transition:all 0.15s;
+}
+.fab:hover { transform:scale(1.08); box-shadow:0 6px 28px rgba(0,200,232,0.5); }
+.fab.hidden { display:none; }
+
+/* ─── SECTION TITLE ─── */
+.stitle {
+  font-family:var(--mono); font-size:9px; font-weight:700;
+  color:var(--t3); letter-spacing:1.5px; text-transform:uppercase;
+  margin:4px 0 10px;
+  display:flex; align-items:center; gap:8px;
+}
+.stitle::after { content:''; flex:1; height:1px; background:var(--border); }
+
+/* ─── SENTIMENT METER ─── */
+.sent-meter { margin-bottom:12px; }
+.sm-row { display:flex; align-items:center; gap:10px; margin-bottom:5px; }
+.sm-lbl { font-family:var(--mono); font-size:11px; font-weight:700; min-width:38px; color:var(--t2); }
+.sm-track { flex:1; height:5px; background:var(--border); border-radius:3px; overflow:hidden; }
+.sm-fill { height:100%; border-radius:3px; transition:width 0.8s ease; }
+.sf-bull { background:var(--green); }
+.sf-bear { background:var(--red); }
+.sf-neut { background:var(--amber); }
+.sm-tag { font-family:var(--mono); font-size:9px; min-width:38px; text-align:right; font-weight:600; }
+
+/* ─── ALERT PULSE ─── */
+.alert-pulse {
+  background:linear-gradient(135deg, rgba(255,61,85,0.07), rgba(255,107,53,0.04));
+  border:1px solid rgba(255,61,85,0.2);
+  border-left:3px solid var(--red);
+  border-radius:10px;
+  padding:11px 14px;
+  margin-bottom:10px;
+  display:flex; align-items:center; gap:10px;
+}
+.alert-pulse .ap-dot {
+  width:8px; height:8px; border-radius:50%;
+  background:var(--red); flex-shrink:0;
+  animation:blink 0.8s infinite;
+}
+.alert-pulse.ok { border-color:rgba(0,217,126,0.2); border-left-color:var(--green); background:linear-gradient(135deg,rgba(0,217,126,0.06),rgba(0,217,126,0.03)); }
+.alert-pulse.ok .ap-dot { background:var(--green); animation:blink 2s infinite; }
+.ap-text { font-size:11px; color:var(--t2); line-height:1.5; }
+.ap-text strong { color:var(--text); }
+
+/* ─── NEXT ALERT COUNTDOWN ─── */
+.next-alert {
+  background:var(--card2);
+  border:1px solid var(--b2);
+  border-radius:10px;
+  padding:12px 16px;
+  margin-bottom:10px;
+  display:flex; align-items:center; gap:12px;
+}
+.na-time { font-family:var(--mono); font-size:20px; font-weight:700; color:var(--cyan); min-width:60px; }
+.na-info { }
+.na-label { font-size:12px; font-weight:500; color:var(--text); }
+.na-sub { font-size:10px; color:var(--t3); margin-top:2px; }
+.na-countdown { font-family:var(--mono); font-size:11px; color:var(--amber); margin-top:2px; font-weight:600; }
+
+/* ─── PLAN CARD ─── */
+.plan-card {
+  background:var(--card);
+  border:1px solid var(--border);
+  border-top:2px solid var(--purple);
+  border-radius:12px;
+  padding:14px 16px;
+  margin-bottom:10px;
+}
+.plan-title {
+  font-family:var(--mono); font-size:10px; font-weight:700;
+  color:var(--purple); letter-spacing:1px; text-transform:uppercase;
+  margin-bottom:10px;
+  display:flex; align-items:center; gap:6px;
+}
+.plan-step {
+  display:flex; gap:10px;
+  padding:7px 0;
+  border-bottom:1px solid var(--border);
+  font-size:12px; color:var(--t2); line-height:1.55;
+}
+.plan-step:last-child { border-bottom:none; }
+.plan-num {
+  font-family:var(--mono); font-size:10px; font-weight:700;
+  color:var(--purple); min-width:18px; margin-top:1px;
+}
+.plan-step strong { color:var(--text); }
+
+/* ─── RESPONSIVE ─── */
+@media (min-width:768px) {
+  .shell { border-left:1px solid var(--border); border-right:1px solid var(--border); }
+}
+</style>
+</head>
+<body>
+<div class="shell">
+
+<!-- HEADER -->
+<header class="hdr">
+  <div class="logo">TREJD<b>OVO</b></div>
+  <div class="hdr-right">
+    <div class="hdr-clock" id="clk">--:--:--</div>
+    <div class="hdr-date" id="clk-date">UK Time</div>
+  </div>
+</header>
+
+<!-- STATUS BAR -->
+<div class="status-bar">
+  <div class="status-pill sp-live" id="sp-fj" onclick="switchTo('newsy')">
+    <div class="dot"></div>FIN JUICE
+  </div>
+  <div class="status-pill sp-off" id="sp-ai">
+    <div class="dot"></div>AI ENGINE
+  </div>
+  <div class="status-pill sp-off" id="sp-mt5">
+    <div class="dot"></div>MT5
+  </div>
+  <div class="status-pill sp-off" id="sp-tv">
+    <div class="dot"></div>TV WEBHOOK
+  </div>
+  <div class="status-pill sp-off" id="sp-push">
+    <div class="dot"></div>PUSH
+  </div>
+</div>
+
+<!-- NAV -->
+<nav class="nav">
+  <button class="nb on"  onclick="switchTo('dashboard')">Dashboard</button>
+  <button class="nb"     onclick="switchTo('sentinel')">Sentinel</button>
+  <button class="nb"     onclick="switchTo('raporty')">Raporty</button>
+  <button class="nb"     onclick="switchTo('newsy')">Newsy</button>
+  <button class="nb"     onclick="switchTo('kalendarz')">Kalendarz</button>
+  <button class="nb"     onclick="switchTo('journal')">Journal</button>
+  <button class="nb"     onclick="switchTo('watchlist')">Watchlist</button>
+  <button class="nb"     onclick="switchTo('ustawienia')">Config</button>
+</nav>
+
+<main class="content">
+
+<!-- ══════════ DASHBOARD ══════════ -->
+<section class="sec on" id="sec-dashboard">
+
+  <div class="next-alert" id="next-alert-box">
+    <div class="na-time" id="na-time">14:30</div>
+    <div class="na-info">
+      <div class="na-label" id="na-label">US Jobless Claims</div>
+      <div class="na-sub" id="na-sub">Wysoki wpływ — NQ, GOLD wrażliwe</div>
+      <div class="na-countdown" id="na-countdown">Obliczanie...</div>
+    </div>
+  </div>
+
+  <div class="stitle">Sentinel — status rynku</div>
+
+  <div class="sentinel-alert warn" id="sent-main">
+    <div class="sent-hdr">
+      <span class="sent-ico">⚠️</span>
+      <span class="sent-title">UWAGA — ZAPALNIK FUNDAMENTALNY</span>
+      <span class="sent-time" id="sent-main-time">--:--</span>
+    </div>
+    <div class="sent-body" id="sent-main-body">
+      Ładowanie analizy Sentinel... Kliknij "Uruchom Sentinel" w zakładce Sentinel lub skonfiguruj klucz API.
+    </div>
+    <div class="sent-inst">
+      <span class="sent-tag b-warn">CL</span>
+      <span class="sent-tag b-neut">NQ</span>
+    </div>
+  </div>
+
+  <div class="stitle">Sentyment Wielkiej Czwórki</div>
+
+  <div class="card">
+    <div class="sent-meter" id="sent-meters">
+      <div class="sm-row"><span class="sm-lbl">NQ</span><div class="sm-track"><div class="sm-fill sf-bear" style="width:35%"></div></div><span class="sm-tag" style="color:var(--red)">BEAR</span></div>
+      <div class="sm-row"><span class="sm-lbl">CL</span><div class="sm-track"><div class="sm-fill sf-neut" style="width:50%"></div></div><span class="sm-tag" style="color:var(--amber)">NEUT</span></div>
+      <div class="sm-row"><span class="sm-lbl">BTC</span><div class="sm-track"><div class="sm-fill sf-bear" style="width:38%"></div></div><span class="sm-tag" style="color:var(--red)">BEAR</span></div>
+      <div class="sm-row"><span class="sm-lbl">GOLD</span><div class="sm-track"><div class="sm-fill sf-bull" style="width:78%"></div></div><span class="sm-tag" style="color:var(--green)">BULL</span></div>
+    </div>
+    <div style="padding:6px 0 2px; font-size:10px; color:var(--t3); font-family:var(--mono); text-align:right" id="sent-updated">Ostatnia aktualizacja: brak</div>
+  </div>
+
+  <div class="stitle">Instrumenty</div>
+  <div class="card">
+    <div class="inst-row" onclick="switchTo('raporty')">
+      <div class="inst-ico i-nq">NQ</div>
+      <div class="inst-info"><div class="inst-name">NQ</div><div class="inst-sub">Nasdaq 100 Futures</div></div>
+      <div class="inst-right"><div class="inst-sent sent-bear">BEARISH</div><div class="inst-note">Pod kluczowym oporem</div></div>
+    </div>
+    <div class="inst-row" onclick="switchTo('raporty')">
+      <div class="inst-ico i-cl">CL</div>
+      <div class="inst-info"><div class="inst-name">CL</div><div class="inst-sub">Crude Oil WTI</div></div>
+      <div class="inst-right"><div class="inst-sent sent-neut">NEUTRAL</div><div class="inst-note">Dyplomacja vs podaż</div></div>
+    </div>
+    <div class="inst-row" onclick="switchTo('raporty')">
+      <div class="inst-ico i-btc">₿</div>
+      <div class="inst-info"><div class="inst-name">BTC</div><div class="inst-sub">Bitcoin / USD</div></div>
+      <div class="inst-right"><div class="inst-sent sent-bear">BEARISH</div><div class="inst-note">Śledzi NQ</div></div>
+    </div>
+    <div class="inst-row" onclick="switchTo('raporty')">
+      <div class="inst-ico i-xau">Au</div>
+      <div class="inst-info"><div class="inst-name">GOLD</div><div class="inst-sub">XAU / USD</div></div>
+      <div class="inst-right"><div class="inst-sent sent-bull">BULLISH</div><div class="inst-note">Safe haven — silny</div></div>
+    </div>
+  </div>
+
+  <div class="stitle">Ten tydzień</div>
+  <div class="stats-grid">
+    <div class="stat-box"><div class="sb-label">Win rate</div><div class="sb-val" style="color:var(--green)">64%</div><div class="sb-sub">7W / 4L</div></div>
+    <div class="stat-box"><div class="sb-label">P&L netto</div><div class="sb-val" style="color:var(--green)">+$840</div><div class="sb-sub">Tygodniowy</div></div>
+    <div class="stat-box"><div class="sb-label">Najlepszy</div><div class="sb-val" style="color:var(--green)">+$420</div><div class="sb-sub">GOLD long</div></div>
+    <div class="stat-box"><div class="sb-label">Najgorszy</div><div class="sb-val" style="color:var(--red)">-$180</div><div class="sb-sub">CL short</div></div>
+  </div>
+
+</section>
+
+<!-- ══════════ SENTINEL ══════════ -->
+<section class="sec" id="sec-sentinel">
+
+  <div class="setup-card" id="sentinel-setup">
+    <div class="setup-title">🛡️ SENTINEL — Strażnik Rynku</div>
+    <div class="setup-desc">
+      Sentinel to Twój AI agent który <strong>czyta newsy z Financial Juice + kalendarz makro</strong> i ocenia każdy walor pod kątem "zapalników fundamentalnych" — czyli newsów które mogą zniszczyć dobry setup techniczny.<br><br>
+      Do działania potrzebny jest klucz API Anthropic. Uzyskaj go na <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>.
+    </div>
+    <div class="form-grp">
+      <label class="form-lbl">Anthropic API Key</label>
+      <input class="f-input" type="password" id="api-key-input" placeholder="sk-ant-...">
+    </div>
+    <button class="btn-primary" onclick="saveApiKey()">ZAPISZ I AKTYWUJ</button>
+  </div>
+
+  <div id="sentinel-active" style="display:none">
+    <button class="btn-primary" onclick="runSentinel()" id="sentinel-run-btn" style="margin-bottom:14px">
+      🛡️ URUCHOM ANALIZĘ SENTINEL
+    </button>
+
+    <div id="sentinel-loading" style="display:none">
+      <div class="ai-gen"><div class="ai-spinner"></div>Sentinel analizuje newsy i kalendarz... to zajmie chwilę.</div>
+    </div>
+
+    <div id="sentinel-results"></div>
+  </div>
+
+  <div class="stitle">Jak działa Sentinel</div>
+  <div class="card">
+    <div style="font-size:12px; color:var(--t2); line-height:1.7">
+      <p style="margin-bottom:8px">Sentinel codziennie (lub na żądanie) robi następujące rzeczy:</p>
+      <p style="margin-bottom:6px; padding-left:12px; border-left:2px solid var(--cyan)"><strong style="color:var(--text)">1. Skanuje newsy</strong> — czyta Financial Juice i ocenia wpływ każdej informacji na Twoją Wielką Czwórkę.</p>
+      <p style="margin-bottom:6px; padding-left:12px; border-left:2px solid var(--amber)"><strong style="color:var(--text)">2. Wykrywa zapalniki</strong> — jeśli jest aktywny geopolityczny lub makroekonomiczny "zapalnik" (np. blokada cieśniny, decyzja Fed), ostrzega Cię PRZED wejściem w trade.</p>
+      <p style="margin-bottom:6px; padding-left:12px; border-left:2px solid var(--purple)"><strong style="color:var(--text)">3. Konfrontuje z techniką</strong> — mówi czy fundamenty wspierają lub blokują sygnał z TradingView.</p>
+      <p style="padding-left:12px; border-left:2px solid var(--green)"><strong style="color:var(--text)">4. Daje plan dnia</strong> — konkretne kroki: co sprawdzić na TV, kiedy czekać, kiedy być gotowy.</p>
+    </div>
+  </div>
+
+</section>
+
+<!-- ══════════ RAPORTY ══════════ -->
+<section class="sec" id="sec-raporty">
+
+  <div id="report-gen-area">
+    <div id="report-gen-btn-area">
+      <button class="btn-primary" onclick="generateReport()" id="report-gen-btn" style="margin-bottom:14px">
+        ⚡ GENERUJ RAPORT AI (07:00–14:35)
+      </button>
+    </div>
+    <div id="report-loading" style="display:none">
+      <div class="ai-gen"><div class="ai-spinner"></div>AI generuje raport dla Wielkiej Czwórki...</div>
+    </div>
+  </div>
+
+  <div id="report-output"></div>
+
+  <!-- Static fallback report -->
+  <div class="report-block" id="static-report">
+    <div class="report-time-hdr">
+      <div><div class="rtl">⚡ 07:00 — Europejski Setup</div><div class="rts">Czwartek, 16 kwietnia 2026</div></div>
+      <div class="badge b-live">LIVE</div>
+    </div>
+    <div class="report-narrative">
+      Azja zamknęła się <strong>mieszanie</strong>. Dominującym tematem jest <em>nadzieja na zawieszenie broni USA–Iran</em> — rynki reagują risk-on, ale ostrożnie. Dolar lekko osłabia, co wspiera złoto i ropę. NQ konsoliduje przed kluczowymi danymi o <strong>14:30</strong>.
+    </div>
+    <table class="report-table">
+      <thead><tr>
+        <th>Instrument</th>
+        <th>Status</th>
+        <th>Co sprawdzić na TV</th>
+      </tr></thead>
+      <tbody>
+        <tr>
+          <td><div class="rt-inst"><div class="rt-dot" style="background:var(--cyan)"></div>NQ</div></td>
+          <td><span class="badge b-bear" style="margin-bottom:4px;display:inline-block">BEARISH</span><br>Kontrakty pod oporem. Dane o 14:30 kluczowe.</td>
+          <td>Sprawdź czy 18,400 trzyma jako opór. Jeśli Jobless Claims gorsze od prognoz → szukaj shorta poniżej.</td>
+        </tr>
+        <tr>
+          <td><div class="rt-inst"><div class="rt-dot" style="background:var(--amber)"></div>CL</div></td>
+          <td><span class="badge b-neut" style="margin-bottom:4px;display:inline-block">NEUTRAL</span><br>Dyplomacja Iran = neutralizuje strach o podaż.</td>
+          <td>Obserwuj strefę $90–95. Newsy pokojowe mogą zepchnąć cenę.</td>
+        </tr>
+        <tr>
+          <td><div class="rt-inst"><div class="rt-dot" style="background:var(--gold)"></div>GOLD</div></td>
+          <td><span class="badge b-bull" style="margin-bottom:4px;display:inline-block">BULLISH</span><br>Powyżej $3,200. Safe haven popyt silny.</td>
+          <td>Setup do longu przy każdym cofnięciu. Sprawdź poziom $3,180 jako wsparcie.</td>
+        </tr>
+        <tr>
+          <td><div class="rt-inst"><div class="rt-dot" style="background:var(--gold)"></div>BTC</div></td>
+          <td><span class="badge b-neut" style="margin-bottom:4px;display:inline-block">WATCH</span><br>Konsolidacja ~$83k. Brak impulsu.</td>
+          <td>Jeśli NQ wybije w górę po danych → BTC może pójść za nim. Obserwuj $85k jako opór.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="report-block">
+    <div class="report-time-hdr">
+      <div><div class="rtl">🔔 14:00 — Pre-market USA</div><div class="rts">Generowany automatycznie o 14:00</div></div>
+      <div class="badge b-off">PENDING</div>
+    </div>
+    <div class="report-pending"><div class="pend-time">14:00</div><p>Raport zostanie wygenerowany przez AI 5 minut przed otwarciem NYSE. Będzie zawierał scenariusze IF/THEN dla danych 14:30.</p></div>
+  </div>
+
+  <div class="report-block">
+    <div class="report-time-hdr">
+      <div><div class="rtl">⚡ 14:30 — Reakcja na dane</div><div class="rts">Jobless Claims — generowany po publikacji</div></div>
+      <div class="badge b-off">PENDING</div>
+    </div>
+    <div class="report-pending"><div class="pend-time">14:35</div><p>5 minut po publikacji — AI porównuje actual vs forecast i mówi co dalej dla Twojej Czwórki.</p></div>
+  </div>
+
+</section>
+
+<!-- ══════════ NEWSY ══════════ -->
+<section class="sec" id="sec-newsy">
+
+  <div class="card">
+    <div class="card-hdr">
+      <span class="card-label">Financial Juice — Live Feed</span>
+      <div class="badge b-live">● LIVE</div>
+    </div>
+
+    <div class="news-item">
+      <div class="news-dot" style="background:var(--red)"></div>
+      <div>
+        <div class="news-hl">Fed's Powell: No rush to cut rates — data-dependent through 2026</div>
+        <div class="news-meta">
+          <span>13:47 UK</span>
+          <span class="ni-high">HIGH</span>
+          <span class="news-move-down">↓ NQ ↓ BTC</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="news-item">
+      <div class="news-dot" style="background:var(--amber)"></div>
+      <div>
+        <div class="news-hl">Iran–US ceasefire talks progressing — Hormuz threat easing</div>
+        <div class="news-meta">
+          <span>13:22 UK</span>
+          <span class="ni-med">MED</span>
+          <span class="news-move-down">↓ CL</span>
+          <span class="news-move-up">↑ NQ</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="news-item">
+      <div class="news-dot" style="background:var(--green)"></div>
+      <div>
+        <div class="news-hl">Gold breaks $3,200 — dollar weakness supports fresh highs</div>
+        <div class="news-meta">
+          <span>13:05 UK</span>
+          <span class="ni-med">MED</span>
+          <span class="news-move-up">↑ GOLD</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="news-item">
+      <div class="news-dot" style="background:var(--t3)"></div>
+      <div>
+        <div class="news-hl">Bitcoin ETF outflows: $180M in 24h — selling pressure persists</div>
+        <div class="news-meta">
+          <span>12:48 UK</span>
+          <span class="ni-low">LOW</span>
+          <span class="news-move-down">↓ BTC</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="news-item">
+      <div class="news-dot" style="background:var(--t3)"></div>
+      <div>
+        <div class="news-hl">ECB holds — confirms gradual easing pace, EUR stable</div>
+        <div class="news-meta"><span>12:15 UK</span><span class="ni-low">LOW</span></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div id="news-ai-analysis" style="display:none">
+    <div class="stitle">AI analiza newsów</div>
+    <div class="card" id="news-ai-content"></div>
+  </div>
+
+  <button class="btn-primary" onclick="analyzeNews()" id="analyze-news-btn">🧠 ANALIZUJ WPŁYW NA WIELKĄ CZWÓRKĘ</button>
+
+</section>
+
+<!-- ══════════ KALENDARZ ══════════ -->
+<section class="sec" id="sec-kalendarz">
+
+  <div class="card">
+    <div class="card-hdr">
+      <span class="card-label">16 Kwiecień 2026</span>
+      <span class="badge b-live">Dziś</span>
+    </div>
+
+    <div class="cal-row">
+      <span class="cal-time past">07:00</span>
+      <div class="cal-bar cb-l"></div>
+      <div class="cal-info">
+        <div class="cal-name">German CPI (Final)</div>
+        <div class="cal-vals"><span>Prognoza: 0.3%</span><span class="cv-actual cv-beat">✓ Actual: 0.4%</span></div>
+      </div>
+    </div>
+
+    <div class="cal-row">
+      <span class="cal-time past">10:00</span>
+      <div class="cal-bar cb-m"></div>
+      <div class="cal-info">
+        <div class="cal-name">Eurozone Industrial Production</div>
+        <div class="cal-vals"><span>Prognoza: -0.1%</span><span class="cv-actual cv-miss">✗ Actual: -0.5%</span></div>
+      </div>
+    </div>
+
+    <div class="cal-row">
+      <span class="cal-time alert">14:30 ⚠️</span>
+      <div class="cal-bar cb-h"></div>
+      <div class="cal-info">
+        <div class="cal-name">US Jobless Claims</div>
+        <div class="cal-vals"><span>Prognoza: 225K</span><span style="color:var(--t3)">Oczekuje...</span></div>
+      </div>
+    </div>
+
+    <div class="cal-row">
+      <span class="cal-time">14:30</span>
+      <div class="cal-bar cb-m"></div>
+      <div class="cal-info">
+        <div class="cal-name">Philadelphia Fed Manufacturing</div>
+        <div class="cal-vals"><span>Prognoza: 3.0</span><span style="color:var(--t3)">Oczekuje...</span></div>
+      </div>
+    </div>
+
+    <div class="cal-row">
+      <span class="cal-time alert">15:30 ⚠️</span>
+      <div class="cal-bar cb-h"></div>
+      <div class="cal-info">
+        <div class="cal-name">EIA Natural Gas Storage</div>
+        <div class="cal-vals"><span>Prognoza: -38B</span><span style="color:var(--t3)">Oczekuje...</span><span class="badge b-warn">CL ALERT</span></div>
+      </div>
+    </div>
+
+  </div>
+
+</section>
+
+<!-- ══════════ JOURNAL ══════════ -->
+<section class="sec" id="sec-journal">
+
+  <div class="stats-grid">
+    <div class="stat-box"><div class="sb-label">Trade'y</div><div class="sb-val">11</div><div class="sb-sub">ten tydzień</div></div>
+    <div class="stat-box"><div class="sb-label">Win rate</div><div class="sb-val" style="color:var(--green)">64%</div><div class="sb-sub">7W / 4L</div></div>
+    <div class="stat-box"><div class="sb-label">Avg R:R</div><div class="sb-val">1:1.9</div><div class="sb-sub">cel: 1:2.0</div></div>
+    <div class="stat-box"><div class="sb-label">P&L</div><div class="sb-val" style="color:var(--green)">+$840</div><div class="sb-sub">tygodniowy</div></div>
+  </div>
+
+  <div class="stitle">Ostatnie trade'y</div>
+
+  <!-- TRADE 1 — GOLD WIN -->
+  <div class="trade-card">
+    <div class="tc-hdr">
+      <div class="tc-left">
+        <div class="inst-ico i-xau" style="width:26px;height:26px;font-size:10px">Au</div>
+        <span class="tc-name">GOLD</span>
+        <span class="tc-dir dir-l">LONG</span>
+      </div>
+      <div class="tc-pnl pnl-p">+$420</div>
+    </div>
+    <div class="tc-grid">
+      <div class="tc-stat"><div class="tc-sl">Entry</div><div class="tc-sv">3,187.40</div></div>
+      <div class="tc-stat"><div class="tc-sl">Exit</div><div class="tc-sv">3,221.60</div></div>
+      <div class="tc-stat"><div class="tc-sl">R:R</div><div class="tc-sv" style="color:var(--green)">1:2.8</div></div>
+      <div class="tc-stat"><div class="tc-sl">Data</div><div class="tc-sv">15.04</div></div>
+      <div class="tc-stat"><div class="tc-sl">Czas</div><div class="tc-sv">2h 14m</div></div>
+      <div class="tc-stat"><div class="tc-sl">Sesja</div><div class="tc-sv">NY</div></div>
+    </div>
+    <div class="tc-note">"Setup po CPI miss — safe haven flow. Wszedłem po reteście $3,190. Clean setup zgodnie ze strategią."</div>
+    <div class="post-mortem">
+      <div class="pm-hdr"><div class="pm-dot"></div><span class="pm-label">AI Post-Mortem</span></div>
+      <div class="pm-body">
+        <strong>Analiza:</strong> Idealny setup. Fundamenty (risk-off + słaby dolar) w pełni wspierały kierunek longu. RSI na TV potwierdzało wyprzedanie. Wejście po reteście minimalizowało ryzyko. Czas trwania 2h14m — nie zamknąłeś zbyt wcześnie.
+        <div><span class="pm-verdict good">✓ ZGODNY ZE STRATEGIĄ</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRADE 2 — CL LOSS -->
+  <div class="trade-card">
+    <div class="tc-hdr">
+      <div class="tc-left">
+        <div class="inst-ico i-cl" style="width:26px;height:26px;font-size:10px">CL</div>
+        <span class="tc-name">CL</span>
+        <span class="tc-dir dir-s">SHORT</span>
+      </div>
+      <div class="tc-pnl pnl-n">-$280</div>
+    </div>
+    <div class="tc-grid">
+      <div class="tc-stat"><div class="tc-sl">Entry</div><div class="tc-sv">93.40</div></div>
+      <div class="tc-stat"><div class="tc-sl">Exit (SL)</div><div class="tc-sv">94.76</div></div>
+      <div class="tc-stat"><div class="tc-sl">R:R</div><div class="tc-sv" style="color:var(--red)">1:0.6</div></div>
+      <div class="tc-stat"><div class="tc-sl">Data</div><div class="tc-sv">16.04</div></div>
+      <div class="tc-stat"><div class="tc-sl">Czas</div><div class="tc-sv">0h 42m</div></div>
+      <div class="tc-stat"><div class="tc-sl">Sesja</div><div class="tc-sv">London</div></div>
+    </div>
+    <div class="tc-note">"Techniczny short wyglądał świetnie — ale rynek poszedł w górę i uderzył w mój SL."</div>
+    <div class="upload-zone" onclick="document.getElementById('ss-upload').click()">
+      <div>📊 Dodaj screenshot z TradingView</div>
+      <p>AI przeanalizuje setup i powie czy był poprawny</p>
+      <small>PNG, JPG — do 10MB</small>
+    </div>
+    <input type="file" id="ss-upload" style="display:none" accept="image/*" onchange="analyzeScreenshot(this)">
+    <div class="post-mortem">
+      <div class="pm-hdr"><div class="pm-dot"></div><span class="pm-label">AI Post-Mortem — Sekcja Zwłok</span></div>
+      <div class="pm-body">
+        <strong>Co się stało:</strong> Wbiłeś technicznie poprawnego shorta na $93.40, ale rynek "wyciągnął" cenę w górę i uderzył w SL na $94.76.<br><br>
+        <strong>Dlaczego technika przegrała z rynkiem:</strong> O 15:30 były dane Financial Juice o <em>negocjacjach pokojowych Iran–USA</em> — to zmniejszyło premię geopolityczną z ceny ropy. Rynek przestał reagować na sygnały sprzedażowe bo fundamentalny "zapalnik" działał w górę.<br><br>
+        <strong>Błąd Sentinel:</strong> Financial Juice o 13:22 UK sygnalizował dyplomację. Ignorowałeś ten sygnał przez 2h przed wejściem w trade.
+        <div><span class="pm-verdict">✗ ZAPALNIK FUNDAMENTALNY AKTYWNY</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="journal-trades"></div>
+
+</section>
+
+<!-- ══════════ WATCHLIST ══════════ -->
+<section class="sec" id="sec-watchlist">
+
+  <div class="stitle">Aktywne instrumenty</div>
+  <div class="wl-grid">
+    <div class="wl-card active">
+      <div class="wl-top"><span class="wl-sym" style="color:var(--cyan)">NQ</span><span class="wl-chg chg-n">-0.82%</span></div>
+      <div class="wl-price">18,320</div>
+      <div class="wl-name">Nasdaq Futures</div>
+    </div>
+    <div class="wl-card active">
+      <div class="wl-top"><span class="wl-sym" style="color:var(--amber)">CL</span><span class="wl-chg chg-p">+0.34%</span></div>
+      <div class="wl-price">93.14</div>
+      <div class="wl-name">Crude Oil WTI</div>
+    </div>
+    <div class="wl-card active">
+      <div class="wl-top"><span class="wl-sym" style="color:var(--gold)">BTC</span><span class="wl-chg chg-n">-1.20%</span></div>
+      <div class="wl-price">83,440</div>
+      <div class="wl-name">Bitcoin / USD</div>
+    </div>
+    <div class="wl-card active">
+      <div class="wl-top"><span class="wl-sym" style="color:#ffd700">GOLD</span><span class="wl-chg chg-p">+0.61%</span></div>
+      <div class="wl-price">3,218</div>
+      <div class="wl-name">XAU / USD</div>
+    </div>
+    <div class="wl-card" onclick="addInstrument()">
+      <div class="wl-top"><span class="wl-sym" style="color:var(--t3)">+</span></div>
+      <div class="wl-price" style="color:var(--t3);font-size:13px">Dodaj walor</div>
+      <div class="wl-name">ES, EUR/USD, ETH...</div>
+    </div>
+  </div>
+
+</section>
+
+<!-- ══════════ CONFIG ══════════ -->
+<section class="sec" id="sec-ustawienia">
+
+  <div class="setup-card" id="api-config">
+    <div class="setup-title">🔑 ANTHROPIC API KEY</div>
+    <div class="setup-desc">Wymagany do działania agentów AI (Sentinel, Raporty, Post-Mortem, Analiza screenshotów).</div>
+    <div class="form-grp">
+      <label class="form-lbl">API Key</label>
+      <input class="f-input" type="password" id="api-key-config" placeholder="sk-ant-...">
+    </div>
+    <button class="btn-primary" onclick="saveApiKey()">ZAPISZ KLUCZ</button>
+  </div>
+
+  <div class="card">
+    <div class="card-hdr"><span class="card-label">Alerty dzienne</span></div>
+    <div class="set-row">
+      <div><div class="set-label">07:00 UK — Europejski Setup</div><div class="set-sub">Analiza Azji + narracja dnia + plan dla Czwórki</div></div>
+      <label class="toggle"><input type="checkbox" id="al-0700" checked><div class="tg-track"></div><div class="tg-thumb"></div></label>
+    </div>
+    <div class="set-row">
+      <div><div class="set-label">14:00 UK — Pre-market USA</div><div class="set-sub">Scenariusze IF/THEN przed danymi z USA</div></div>
+      <label class="toggle"><input type="checkbox" id="al-1400" checked><div class="tg-track"></div><div class="tg-thumb"></div></label>
+    </div>
+    <div class="set-row">
+      <div><div class="set-label">14:30 UK — Reakcja na dane</div><div class="set-sub">Analiza actual vs forecast, flow kapitału</div></div>
+      <label class="toggle"><input type="checkbox" id="al-1430" checked><div class="tg-track"></div><div class="tg-thumb"></div></label>
+    </div>
+    <div class="set-row">
+      <div><div class="set-label">Dynamiczne alerty</div><div class="set-sub">Gdy ważne dane poza harmonogramem (EIA 15:30, FOMC etc.)</div></div>
+      <label class="toggle"><input type="checkbox" id="al-dyn" checked><div class="tg-track"></div><div class="tg-thumb"></div></label>
+    </div>
+    <div class="set-row">
+      <div><div class="set-label">Alert: Potencjalny setup</div><div class="set-sub">Push gdy Sentinel wykryje setup na którymś z walorów</div></div>
+      <label class="toggle"><input type="checkbox" id="al-setup" checked><div class="tg-track"></div><div class="tg-thumb"></div></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hdr"><span class="card-label">Połączenia</span></div>
+    <div class="set-row">
+      <div><div class="set-label">MT5 API Bridge</div><div class="set-sub">Auto-import trade'ów przez Claude Code + Python</div></div>
+      <div class="set-right"><span class="badge b-off">Setup</span></div>
+    </div>
+    <div class="set-row">
+      <div><div class="set-label">TradingView Webhook</div><div class="set-sub">Alerty z TV → Trejdovo → Sentinel weryfikacja</div></div>
+      <div class="set-right"><span class="badge b-off">Setup</span></div>
+    </div>
+    <div class="set-row">
+      <div><div class="set-label">Financial Juice</div><div class="set-sub">Live news feed — scraper</div></div>
+      <div class="set-right"><span class="badge b-live">Aktywne</span></div>
+    </div>
+    <div class="set-row">
+      <div><div class="set-label">Firebase (Google)</div><div class="set-sub">Journal, ustawienia, historia raportów</div></div>
+      <div class="set-right"><span class="badge b-off">Setup</span></div>
+    </div>
+    <div class="set-row">
+      <div><div class="set-label">Push Notifications</div><div class="set-sub">FCM — alerty na Android/Chrome</div></div>
+      <div class="set-right"><button class="btn-primary" style="width:auto;padding:6px 12px;font-size:10px;margin:0" onclick="requestPush()">WŁĄCZ</button></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-hdr"><span class="card-label">Instrukcje — MT5 Bridge</span></div>
+    <div style="font-size:11px; color:var(--t2); line-height:1.7">
+      <p style="margin-bottom:8px">Aby podłączyć MT5 do Trejdovo, potrzebujesz Claude Code lokalnie:</p>
+      <pre style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:10px;color:var(--cyan);overflow-x:auto;margin-bottom:8px">pip install MetaTrader5 anthropic
+# Skrypt Claude Code będzie automatycznie
+# importował closed trades do journal API</pre>
+      <p>Pełna dokumentacja integracji zostanie wygenerowana po konfiguracji API key.</p>
+    </div>
+  </div>
+
+</section>
+
+</main>
+</div>
+
+<!-- FAB -->
+<button class="fab" id="fab" onclick="openModal()">+</button>
+
+<!-- ADD TRADE MODAL -->
+<div class="overlay" id="modal-overlay" onclick="overlayClose(event)">
+  <div class="modal">
+    <div class="modal-title">
+      Nowy trade — Journal
+      <button class="m-close" onclick="closeModal()">✕</button>
+    </div>
+
+    <div class="form-grp">
+      <label class="form-lbl">Instrument</label>
+      <select class="f-sel" id="m-inst">
+        <option>NQ — Nasdaq Futures</option>
+        <option>CL — Crude Oil WTI</option>
+        <option>GOLD — XAU/USD</option>
+        <option>BTC — Bitcoin</option>
+        <option>ES — S&P 500</option>
+        <option>EURUSD</option>
+      </select>
+    </div>
+
+    <div class="form-grp">
+      <label class="form-lbl">Kierunek</label>
+      <div class="dir-btns">
+        <button class="dir-btn sel-l" id="btn-long" onclick="selDir('L')">LONG ↑</button>
+        <button class="dir-btn" id="btn-short" onclick="selDir('S')">SHORT ↓</button>
+      </div>
+    </div>
+
+    <div class="form-grp">
+      <label class="form-lbl">Entry / Exit</label>
+      <div class="form-row">
+        <input class="f-input" type="number" id="m-entry" placeholder="Entry price" step="0.01">
+        <input class="f-input" type="number" id="m-exit" placeholder="Exit price" step="0.01">
+      </div>
+    </div>
+
+    <div class="form-grp">
+      <label class="form-lbl">P&L ($)</label>
+      <input class="f-input" type="number" id="m-pnl" placeholder="+420 lub -180">
+    </div>
+
+    <div class="form-grp">
+      <label class="form-lbl">Screenshot z TradingView (AI przeanalizuje setup)</label>
+      <div class="upload-zone" onclick="document.getElementById('m-file').click()" id="m-upload-zone">
+        <div>📊 Kliknij aby dodać screenshot</div>
+        <p>AI oceni czy setup był zgodny ze strategią</p>
+        <small>PNG, JPG</small>
+      </div>
+      <input type="file" id="m-file" style="display:none" accept="image/*" onchange="previewFile(this)">
+    </div>
+
+    <div class="form-grp">
+      <label class="form-lbl">Notatka (psychologia, dlaczego?)</label>
+      <textarea class="f-area" id="m-note" placeholder="Np. czekałem na retestt strefy, setup był clean, wszedłem przez FOMO..."></textarea>
+    </div>
+
+    <button class="btn-primary" id="save-btn" onclick="saveTrade()">ZAPISZ TRADE + URUCHOM POST-MORTEM AI</button>
+  </div>
+</div>
+
+<script>
+// ─── CLOCK ───
+function updateClock() {
+  const uk = new Date(new Date().toLocaleString('en-US', {timeZone:'Europe/London'}));
+  const p = n => String(n).padStart(2,'0');
+  document.getElementById('clk').textContent = `${p(uk.getHours())}:${p(uk.getMinutes())}:${p(uk.getSeconds())}`;
+  const days = ['Niedz','Pon','Wt','Śr','Czw','Pt','Sob'];
+  const months = ['sty','lut','mar','kwi','maj','cze','lip','sie','wrz','paź','lis','gru'];
+  document.getElementById('clk-date').textContent = `${days[uk.getDay()]} ${uk.getDate()} ${months[uk.getMonth()]}`;
+  updateCountdown(uk);
+}
+// ─── COUNTDOWN ───
+const ALERTS = [
+  {h:7, m:0, label:'Europejski Setup', sub:'Analiza Azji + narracja dnia'},
+  {h:14, m:0, label:'Pre-market USA', sub:'Scenariusze przed danymi'},
+  {h:14, m:30, label:'US Jobless Claims', sub:'Wysoki wpływ — NQ, GOLD wrażliwe'},
+  {h:15, m:30, label:'EIA Natural Gas', sub:'Ważny dla CL — obserwuj'}
+];
+
+setInterval(updateClock, 1000);
+updateClock();
+
+function updateCountdown(uk) {
+  const nowMin = uk.getHours()*60 + uk.getMinutes();
+  let next = null;
+  for (const a of ALERTS) {
+    const aMin = a.h*60+a.m;
+    if (aMin > nowMin) { next = a; break; }
+  }
+  if (!next) next = ALERTS[0];
+  const h = String(next.h).padStart(2,'0');
+  const m = String(next.m).padStart(2,'0');
+  document.getElementById('na-time').textContent = `${h}:${m}`;
+  document.getElementById('na-label').textContent = next.label;
+  document.getElementById('na-sub').textContent = next.sub;
+  const diff = (next.h*60+next.m) - nowMin;
+  if (diff <= 0) {
+    document.getElementById('na-countdown').textContent = '🔴 TERAZ';
+  } else if (diff < 60) {
+    document.getElementById('na-countdown').textContent = `za ${diff} minut`;
+  } else {
+    document.getElementById('na-countdown').textContent = `za ${Math.floor(diff/60)}h ${diff%60}min`;
+  }
+}
+
+// ─── NAV ───
+function switchTo(id) {
+  document.querySelectorAll('.sec').forEach(s => s.classList.remove('on'));
+  document.querySelectorAll('.nb').forEach(b => b.classList.remove('on'));
+  document.getElementById('sec-'+id).classList.add('on');
+  const btns = document.querySelectorAll('.nb');
+  const map = ['dashboard','sentinel','raporty','newsy','kalendarz','journal','watchlist','ustawienia'];
+  btns[map.indexOf(id)]?.classList.add('on');
+  document.getElementById('fab').classList.toggle('hidden', id !== 'journal' && id !== 'dashboard');
+}
+
+// ─── API KEY ───
+let ANTHROPIC_API_KEY = localStorage.getItem('tj_apikey') || '';
+
+function saveApiKey() {
+  // Try both inputs
+  const inp1 = document.getElementById('api-key-input');
+  const inp2 = document.getElementById('api-key-config');
+  const v = (inp1 && inp1.value.trim()) || (inp2 && inp2.value.trim()) || '';
+  
+  if (v.length < 10) {
+    alert('Wklej klucz API w pole powyżej (zaczyna się od sk-ant-)');
+    return;
+  }
+  
+  ANTHROPIC_API_KEY = v;
+  localStorage.setItem('tj_apikey', v);
+  
+  // Update status pill
+  const spAi = document.getElementById('sp-ai');
+  if (spAi) { spAi.className = 'status-pill sp-live'; }
+  
+  // Clear inputs
+  if (inp1) inp1.value = '';
+  if (inp2) inp2.value = '';
+  
+  // Show sentinel active
+  const setup = document.getElementById('sentinel-setup');
+  const active = document.getElementById('sentinel-active');
+  if (setup) setup.style.display = 'none';
+  if (active) active.style.display = 'block';
+  
+  alert('✓ Klucz API zapisany! Sentinel aktywny. Przejdź do zakładki Sentinel i kliknij Uruchom.');
+}
+
+// on load check key
+try {
+  if (ANTHROPIC_API_KEY) {
+    var spAiEl = document.getElementById('sp-ai');
+    if (spAiEl) spAiEl.className = 'status-pill sp-live';
+    var setupEl = document.getElementById('sentinel-setup');
+    var activeEl = document.getElementById('sentinel-active');
+    if (setupEl) setupEl.style.display = 'none';
+    if (activeEl) activeEl.style.display = 'block';
+    var cfgEl = document.getElementById('api-key-config');
+    if (cfgEl) cfgEl.placeholder = '••••••••••••• (zapisany)';
+  }
+} catch(e) { console.log('Init check:', e); }
+
+// ─── CLAUDE API CALL ───
+async function callClaude(systemPrompt, userMsg, maxTokens = 1200) {
+  if (!ANTHROPIC_API_KEY) {
+    throw new Error('Brak klucza API. Skonfiguruj go w zakładce Config.');
+  }
+  const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: maxTokens,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userMsg }]
+    })
+  });
+  if (!resp.ok) {
+    const err = await resp.json().catch(()=>({}));
+    throw new Error(err.error?.message || `API error ${resp.status}`);
+  }
+  const data = await resp.json();
+  return data.content.map(b => b.text || '').join('');
+}
+
+// ─── SENTINEL ───
+const SENTINEL_SYSTEM = `Jesteś Sentinel — AI agent strażnik rynku dla aplikacji Trejdovo.
+
+Twoja rola: Analizujesz aktualną sytuację makroekonomiczną i newsy pod kątem ich wpływu na 4 instrumenty: NQ (Nasdaq Futures), CL (Crude Oil WTI), GOLD (XAU/USD), BTC (Bitcoin).
+
+Odpowiadaj TYLKO w formacie JSON, bez żadnego tekstu przed ani po:
+{
+  "overall": "RISK-ON" | "RISK-OFF" | "MIXED",
+  "overall_reason": "Krótkie wyjaśnienie (max 1 zdanie)",
+  "instruments": {
+    "NQ":   { "sentiment": "BULLISH"|"BEARISH"|"NEUTRAL", "score": 0-100, "signal": "WAIT"|"WATCH"|"READY", "reason": "max 2 zdania po polsku", "zapalnik": "null lub opis zapalnika fundamentalnego" },
+    "CL":   { "sentiment": "BULLISH"|"BEARISH"|"NEUTRAL", "score": 0-100, "signal": "WAIT"|"WATCH"|"READY", "reason": "max 2 zdania", "zapalnik": "null lub opis zapalnika" },
+    "GOLD": { "sentiment": "BULLISH"|"BEARISH"|"NEUTRAL", "score": 0-100, "signal": "WAIT"|"WATCH"|"READY", "reason": "max 2 zdania", "zapalnik": "null lub opis zapalnika" },
+    "BTC":  { "sentiment": "BULLISH"|"BEARISH"|"NEUTRAL", "score": 0-100, "signal": "WAIT"|"WATCH"|"READY", "reason": "max 2 zdania", "zapalnik": "null lub opis zapalnika" }
+  },
+  "plan_dnia": ["krok 1 (max 1 zdanie)", "krok 2", "krok 3"],
+  "setup_alert": "null lub opis potencjalnego setupu np. 'GOLD long — fundamenty wspierają, czekaj na retestt $3,200 na TV'"
+}`;
+
+const TODAY_CONTEXT = `DATA: 16 Kwiecień 2026, godzina UK: ${new Date().toLocaleTimeString('pl', {timeZone:'Europe/London'})}
+
+NEWSY Z FINANCIAL JUICE (dziś):
+- 13:47 Fed Powell: "No rush to cut rates, data-dependent" — HIGH IMPACT
+- 13:22 Iran-US ceasefire talks progressing, Hormuz threat easing — MED IMPACT
+- 13:05 Gold breaks $3,200, dollar weakness — MED IMPACT
+- 12:48 Bitcoin ETF outflows $180M in 24h — LOW IMPACT
+- 12:15 ECB holds rates, gradual easing confirmed — LOW IMPACT
+
+KALENDARZ MAKRO DZIŚ:
+- 07:00 German CPI actual: 0.4% (prognoza 0.3%) — BEAT ✓
+- 10:00 Eurozone Industrial Production: -0.5% (prognoza -0.1%) — MISS ✗
+- 14:30 US Jobless Claims — OCZEKUJE (prognoza 225K) ⚠️ HIGH IMPACT
+- 14:30 Philadelphia Fed Manufacturing — OCZEKUJE
+- 15:30 EIA Natural Gas Storage — OCZEKUJE ⚠️ WAŻNE DLA CL`;
+
+async function runSentinel() {
+  const btn = document.getElementById('sentinel-run-btn');
+  const loading = document.getElementById('sentinel-loading');
+  const results = document.getElementById('sentinel-results');
+
+  btn.disabled = true;
+  btn.textContent = 'Analizuję...';
+  loading.style.display = 'block';
+  results.innerHTML = '';
+
+  try {
+    const raw = await callClaude(SENTINEL_SYSTEM, TODAY_CONTEXT, 1200);
+    const clean = raw.replace(/```json|```/g, '').trim();
+    const data = JSON.parse(clean);
+    renderSentinel(data);
+    updateDashboardSentiment(data);
+    // update timestamp
+    const now = new Date().toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
+    document.getElementById('sent-main-time').textContent = now;
+    document.getElementById('sent-updated').textContent = `Ostatnia aktualizacja: ${now}`;
+  } catch(e) {
+    results.innerHTML = `<div class="card" style="border-color:rgba(255,61,85,0.3)"><div style="color:var(--red);font-size:12px;padding:4px 0">Błąd: ${e.message}</div></div>`;
+  }
+
+  btn.disabled = false;
+  btn.textContent = '🛡️ URUCHOM ANALIZĘ SENTINEL';
+  loading.style.display = 'none';
+}
+
+function renderSentinel(data) {
+  const results = document.getElementById('sentinel-results');
+  const oc = data.overall === 'RISK-ON' ? 'var(--green)' : data.overall === 'RISK-OFF' ? 'var(--red)' : 'var(--amber)';
+
+  let html = `
+  <div class="sentinel-alert ${data.overall==='RISK-ON'?'ok':data.overall==='MIXED'?'warn':''}">
+    <div class="sent-hdr">
+      <span class="sent-ico">${data.overall==='RISK-ON'?'✅':data.overall==='MIXED'?'⚠️':'🔴'}</span>
+      <span class="sent-title">${data.overall} — ${data.overall_reason}</span>
+    </div>
+  </div>`;
+
+  const instColors = {NQ:'var(--cyan)',CL:'var(--amber)',GOLD:'#ffd700',BTC:'var(--gold)'};
+  const signalColors = {WAIT:'var(--t3)',WATCH:'var(--amber)',READY:'var(--green)'};
+
+  for (const [inst, d] of Object.entries(data.instruments)) {
+    const sentClass = d.sentiment==='BULLISH'?'b-bull':d.sentiment==='BEARISH'?'b-bear':'b-neut';
+    const zapHtml = d.zapalnik && d.zapalnik!=='null' ? `
+      <div style="margin-top:8px;padding:7px 10px;background:rgba(255,61,85,0.06);border-left:2px solid var(--red);border-radius:5px;font-size:10px;color:var(--red)">
+        🚨 ZAPALNIK: ${d.zapalnik}
+      </div>` : '';
+
+    html += `
+    <div class="card" style="border-left:3px solid ${instColors[inst]};margin-bottom:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:${instColors[inst]}">${inst}</span>
+        <div style="display:flex;gap:6px;align-items:center">
+          <span class="badge ${sentClass}">${d.sentiment}</span>
+          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${signalColors[d.signal]}">${d.signal}</span>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.6">${d.reason}</div>
+      ${zapHtml}
+    </div>`;
+  }
+
+  if (data.plan_dnia?.length) {
+    html += `<div class="plan-card"><div class="plan-title">📋 Plan Dnia</div>`;
+    data.plan_dnia.forEach((step, i) => {
+      html += `<div class="plan-step"><span class="plan-num">${i+1}.</span><div>${step}</div></div>`;
+    });
+    html += `</div>`;
+  }
+
+  if (data.setup_alert && data.setup_alert !== 'null') {
+    html += `
+    <div class="alert-pulse ok">
+      <div class="ap-dot"></div>
+      <div class="ap-text"><strong>🎯 POTENCJALNY SETUP:</strong> ${data.setup_alert}</div>
+    </div>`;
+    // Update dashboard sentinel block
+    document.getElementById('sent-main').className = 'sentinel-alert ok';
+    document.getElementById('sent-main-body').innerHTML = `<strong>Setup wykryty:</strong> ${data.setup_alert}`;
+  }
+
+  results.innerHTML = html;
+}
+
+function updateDashboardSentiment(data) {
+  const meters = document.getElementById('sent-meters');
+  const map = {NQ:0,CL:1,BTC:2,GOLD:3};
+  const rows = meters.querySelectorAll('.sm-row');
+  for (const [inst, d] of Object.entries(data.instruments)) {
+    const idx = map[inst];
+    if (idx === undefined) continue;
+    const fill = rows[idx].querySelector('.sm-fill');
+    const tag = rows[idx].querySelector('.sm-tag');
+    fill.className = 'sm-fill ' + (d.sentiment==='BULLISH'?'sf-bull':d.sentiment==='BEARISH'?'sf-bear':'sf-neut');
+    fill.style.width = d.score + '%';
+    tag.textContent = d.sentiment.substring(0,4);
+    tag.style.color = d.sentiment==='BULLISH'?'var(--green)':d.sentiment==='BEARISH'?'var(--red)':'var(--amber)';
+  }
+}
+
+// ─── REPORT GENERATOR ───
+const REPORT_SYSTEM = `Jesteś agentem raportującym Trejdovo. Generujesz dzienny raport tradingowy dla 4 instrumentów: NQ, CL, GOLD, BTC.
+
+Odpowiadaj TYLKO w formacie JSON:
+{
+  "narracja": "2-3 zdania opisujące główny temat dnia rynkowego, po polsku",
+  "tabela": [
+    { "instrument": "NQ", "status": "Krótki opis 1-2 zdania", "badge": "BULLISH"|"BEARISH"|"NEUTRAL"|"WATCH", "tv_action": "Co sprawdzić na TradingView — konkretny poziom lub wskaźnik" },
+    { "instrument": "CL", ... },
+    { "instrument": "GOLD", ... },
+    { "instrument": "BTC", ... }
+  ],
+  "alert_claude_code": "Wskazówka dla Claude Code na MT5 — czego unikać lub na co uważać"
+}`;
+
+async function generateReport() {
+  const btn = document.getElementById('report-gen-btn');
+  const loading = document.getElementById('report-loading');
+  const output = document.getElementById('report-output');
+  const staticR = document.getElementById('static-report');
+
+  btn.disabled = true; btn.textContent = 'Generuję...';
+  loading.style.display = 'block';
+
+  try {
+    const raw = await callClaude(REPORT_SYSTEM, TODAY_CONTEXT + '\n\nWygeneruj raport zbiorczy 07:00–14:35 UK.', 1000);
+    const clean = raw.replace(/```json|```/g,'').trim();
+    const data = JSON.parse(clean);
+    renderReport(data, output);
+    staticR.style.display = 'none';
+  } catch(e) {
+    output.innerHTML = `<div class="card" style="border-color:rgba(255,61,85,0.3);margin-bottom:12px"><div style="color:var(--red);font-size:12px">${e.message}</div></div>`;
+  }
+
+  btn.disabled = false; btn.textContent = '⚡ GENERUJ RAPORT AI (07:00–14:35)';
+  loading.style.display = 'none';
+}
+
+function renderReport(data, container) {
+  const badgeClass = b => b==='BULLISH'?'b-bull':b==='BEARISH'?'b-bear':b==='NEUTRAL'?'b-neut':'b-warn';
+  const dotColor = inst => ({NQ:'var(--cyan)',CL:'var(--amber)',GOLD:'#ffd700',BTC:'var(--gold)'}[inst] || 'var(--t2)');
+  const now = new Date().toLocaleString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit', day:'numeric', month:'long', year:'numeric'});
+
+  let rows = data.tabela.map(r => `
+    <tr>
+      <td><div class="rt-inst"><div class="rt-dot" style="background:${dotColor(r.instrument)}"></div>${r.instrument}</div></td>
+      <td><span class="badge ${badgeClass(r.badge)}" style="margin-bottom:4px;display:inline-block">${r.badge}</span><br>${r.status}</td>
+      <td>${r.tv_action}</td>
+    </tr>`).join('');
+
+  container.innerHTML = `
+  <div class="report-block">
+    <div class="report-time-hdr">
+      <div><div class="rtl">⚡ Raport Trejdovo AI</div><div class="rts">${now}</div></div>
+      <div class="badge b-live">AI</div>
+    </div>
+    <div class="report-narrative">${data.narracja}</div>
+    <table class="report-table">
+      <thead><tr><th>Instrument</th><th>Status</th><th>Co sprawdzić na TV</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+    ${data.alert_claude_code ? `
+    <div style="padding:12px 16px;border-top:1px solid var(--border);background:rgba(139,124,248,0.04)">
+      <div style="font-family:var(--mono);font-size:9px;font-weight:700;color:var(--purple);letter-spacing:1px;margin-bottom:5px">🤖 ALERT DLA CLAUDE CODE / MT5</div>
+      <div style="font-size:11px;color:var(--t2)">${data.alert_claude_code}</div>
+    </div>` : ''}
+  </div>`;
+}
+
+// ─── NEWS ANALYSIS ───
+const NEWS_SYSTEM = `Analizujesz newsy finansowe pod kątem wpływu na NQ, CL, GOLD i BTC. Odpowiadaj po polsku, zwięźle. Max 150 słów łącznie. Format: dla każdego instrumentu jedna linijka z oceną wpływu.`;
+
+async function analyzeNews() {
+  const btn = document.getElementById('analyze-news-btn');
+  const area = document.getElementById('news-ai-analysis');
+  const content = document.getElementById('news-ai-content');
+
+  btn.disabled = true; btn.textContent = 'Analizuję...';
+
+  try {
+    const text = await callClaude(NEWS_SYSTEM, TODAY_CONTEXT, 500);
+    area.style.display = 'block';
+    content.innerHTML = `<div style="font-size:12px;color:var(--t2);line-height:1.7;white-space:pre-wrap">${text}</div>`;
+  } catch(e) {
+    content.innerHTML = `<div style="color:var(--red);font-size:12px">${e.message}</div>`;
+    area.style.display = 'block';
+  }
+
+  btn.disabled = false; btn.textContent = '🧠 ANALIZUJ WPŁYW NA WIELKĄ CZWÓRKĘ';
+}
+
+// ─── SCREENSHOT ANALYSIS ───
+const SCREENSHOT_SYSTEM = `Jesteś agentem analizy wykresów TradingView. Opisujesz co widzisz na screenshocie wykresu i oceniasz setup tradingowy.
+
+Opisz po polsku:
+1. Co widzisz na wykresie (trend, formacje, wskaźniki jeśli widoczne)
+2. Czy setup wygląda na zgodny ze strategią (czy jest sygnał wejścia, wsparcie/opór)
+3. Potencjalne ryzyko tego setupu
+4. Ocena: ZGODNY ZE STRATEGIĄ / RYZYKOWNY / NIE WCHODZIĆ
+
+Odpowiedź max 120 słów.`;
+
+async function analyzeScreenshot(input) {
+  if (!input.files[0]) return;
+  if (!ANTHROPIC_API_KEY) { alert('Skonfiguruj klucz API w zakładce Config.'); return; }
+
+  const file = input.files[0];
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    const b64 = e.target.result.split(',')[1];
+    const mtype = file.type;
+
+    try {
+      const resp = await fetch('https://api.anthropic.com/v1/messages', {
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({
+          model:'claude-sonnet-4-20250514',
+          max_tokens:500,
+          system: SCREENSHOT_SYSTEM,
+          messages:[{role:'user', content:[
+            {type:'image', source:{type:'base64', media_type:mtype, data:b64}},
+            {type:'text', text:'Przeanalizuj ten screenshot wykresu TradingView.'}
+          ]}]
+        })
+      });
+      const data = await resp.json();
+      const text = data.content?.map(b=>b.text||'').join('') || 'Błąd analizy';
+      // Insert AI analysis after upload zone
+      const zone = input.closest('.trade-card')?.querySelector('.upload-zone');
+      if (zone) {
+        zone.innerHTML = `<div style="font-size:11px;color:var(--green)">✓ Screenshot przesłany</div>`;
+        const pmDiv = input.closest('.trade-card')?.querySelector('.post-mortem .pm-body');
+        if (pmDiv) pmDiv.innerHTML += `<br><strong>Analiza screenshota:</strong> ${text}`;
+      }
+    } catch(err) {
+      alert('Błąd analizy screenshota: ' + err.message);
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+// ─── MODAL ───
+let selectedDir = 'L';
+function openModal() {
+  document.getElementById('modal-overlay').classList.add('open');
+}
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+function overlayClose(e) {
+  if (e.target === document.getElementById('modal-overlay')) closeModal();
+}
+function selDir(d) {
+  selectedDir = d;
+  document.getElementById('btn-long').className = 'dir-btn' + (d==='L'?' sel-l':'');
+  document.getElementById('btn-short').className = 'dir-btn' + (d==='S'?' sel-s':'');
+}
+
+function previewFile(input) {
+  if (input.files[0]) {
+    document.getElementById('m-upload-zone').innerHTML = `<div style="color:var(--green);font-size:12px">✓ ${input.files[0].name}</div><p>AI przeanalizuje po zapisaniu</p>`;
+  }
+}
+
+async function saveTrade() {
+  const btn = document.getElementById('save-btn');
+  btn.disabled = true; btn.textContent = 'Zapisuję...';
+
+  const trade = {
+    id: Date.now(),
+    instrument: document.getElementById('m-inst').value,
+    direction: selectedDir,
+    entry: document.getElementById('m-entry').value,
+    exit: document.getElementById('m-exit').value,
+    pnl: document.getElementById('m-pnl').value,
+    note: document.getElementById('m-note').value,
+    date: new Date().toLocaleDateString('pl'),
+    time: new Date().toLocaleTimeString('pl', {timeZone:'Europe/London'})
+  };
+
+  // Save to localStorage (Firebase will replace this)
+  const trades = JSON.parse(localStorage.getItem('tj_trades') || '[]');
+  trades.unshift(trade);
+  localStorage.setItem('tj_trades', JSON.stringify(trades));
+
+  // Run Post-Mortem if API key available
+  if (ANTHROPIC_API_KEY && trade.note) {
+    btn.textContent = 'Generuję Post-Mortem AI...';
+    try {
+      const pmText = await callClaude(
+        `Jesteś agentem Post-Mortem dla Trejdovo. Analizujesz zamknięty trade i konfrontujesz go z aktualną sytuacją rynkową. Odpowiadaj po polsku, max 80 słów.`,
+        `Trade: ${trade.instrument} ${trade.direction==='L'?'LONG':'SHORT'}, Entry: ${trade.entry}, Exit: ${trade.exit}, P&L: ${trade.pnl}, Notatka tradera: "${trade.note}"\n\nKontekst rynkowy: ${TODAY_CONTEXT}\n\nOceń: czy fundamenty wspierały ten trade? Jaki był błąd lub co poszło dobrze?`,
+        400
+      );
+      trade.postmortem = pmText;
+      trades[0] = trade;
+      localStorage.setItem('tj_trades', JSON.stringify(trades));
+    } catch(e) {}
+  }
+
+  closeModal();
+  btn.disabled = false;
+  btn.textContent = 'ZAPISZ TRADE + URUCHOM POST-MORTEM AI';
+  loadJournalTrades();
+  switchTo('journal');
+}
+
+function loadJournalTrades() {
+  const trades = JSON.parse(localStorage.getItem('tj_trades') || '[]');
+  const container = document.getElementById('journal-trades');
+  if (!trades.length) { container.innerHTML = ''; return; }
+
+  container.innerHTML = `<div class="stitle">Twoje zapisane trade'y</div>` + trades.slice(0,5).map(t => `
+  <div class="trade-card">
+    <div class="tc-hdr">
+      <div class="tc-left">
+        <span class="tc-name">${t.instrument.split(' ')[0]}</span>
+        <span class="tc-dir ${t.direction==='L'?'dir-l':'dir-s'}">${t.direction==='L'?'LONG':'SHORT'}</span>
+      </div>
+      <div class="tc-pnl ${parseFloat(t.pnl)>=0?'pnl-p':'pnl-n'}">${parseFloat(t.pnl)>=0?'+':''}$${Math.abs(t.pnl)}</div>
+    </div>
+    <div class="tc-grid">
+      <div class="tc-stat"><div class="tc-sl">Entry</div><div class="tc-sv">${t.entry||'—'}</div></div>
+      <div class="tc-stat"><div class="tc-sl">Exit</div><div class="tc-sv">${t.exit||'—'}</div></div>
+      <div class="tc-stat"><div class="tc-sl">Data</div><div class="tc-sv">${t.date}</div></div>
+    </div>
+    ${t.note ? `<div class="tc-note">"${t.note}"</div>` : ''}
+    ${t.postmortem ? `
+    <div class="post-mortem">
+      <div class="pm-hdr"><div class="pm-dot"></div><span class="pm-label">AI Post-Mortem</span></div>
+      <div class="pm-body">${t.postmortem}</div>
+    </div>` : ''}
+  </div>`).join('');
+}
+
+// ─── PUSH NOTIFICATIONS ───
+async function requestPush() {
+  if (!('Notification' in window)) { alert('Ten browser nie obsługuje powiadomień.'); return; }
+  const perm = await Notification.requestPermission();
+  if (perm === 'granted') {
+    document.getElementById('sp-push').className = 'status-pill sp-live';
+    new Notification('Trejdovo', { body: 'Push notifications aktywne! 🎯', icon: '' });
+  }
+}
+
+// ─── SCHEDULED ALERTS ───
+function checkScheduledAlerts() {
+  const uk = new Date(new Date().toLocaleString('en-US', {timeZone:'Europe/London'}));
+  const h = uk.getHours(), m = uk.getMinutes(), s = uk.getSeconds();
+  if (s > 5) return; // only fire in first 5 seconds of each minute
+
+  const alerts = [
+    {h:7, m:0, title:'Trejdovo 07:00', body:'Europejski Setup gotowy — sprawdź zakładkę Raporty'},
+    {h:14, m:0, title:'Trejdovo 14:00', body:'Pre-market USA — 30 min do danych z NYSE'},
+    {h:14, m:25, title:'⚠️ Trejdovo 14:30', body:'Za 5 minut: US Jobless Claims — wysoki wpływ na NQ, GOLD'},
+    {h:15, m:25, title:'⚠️ Trejdovo 15:30', body:'Za 5 minut: EIA Natural Gas — obserwuj CL'},
+  ];
+
+  const match = alerts.find(a => a.h===h && a.m===m);
+  if (match && Notification.permission === 'granted') {
+    new Notification(match.title, {body: match.body});
+    // Also auto-run sentinel at key times
+    if ((h===7&&m===0) || (h===14&&m===0) || (h===14&&m===35)) {
+      if (ANTHROPIC_API_KEY) {
+        switchTo('sentinel');
+        setTimeout(runSentinel, 500);
+      }
+    }
+  }
+}
+setInterval(checkScheduledAlerts, 5000);
+
+// ─── INIT ───
+loadJournalTrades();
+</script>
+</body>
+</html>
