@@ -1519,7 +1519,8 @@ async function callClaude(systemPrompt, userMsg, maxTokens = 1200) {
     throw new Error(err.error?.message || `API error ${resp.status}`);
   }
   const data = await resp.json();
-  return (data.content || []).map(b => b.text || '').join('');
+  const content = Array.isArray(data?.content) ? data.content : [];
+  return content.map(b => b.text || '').join('');
 }
 
 // ─── SENTINEL ───
@@ -1601,7 +1602,8 @@ function renderSentinel(data) {
   const instColors = {NQ:'var(--cyan)',CL:'var(--amber)',GOLD:'#ffd700',BTC:'var(--gold)'};
   const signalColors = {WAIT:'var(--t3)',WATCH:'var(--amber)',READY:'var(--green)'};
 
-  for (const [inst, d] of Object.entries(data.instruments)) {
+  for (const [inst, d] of Object.entries(data.instruments || {})) {
+    if (!d) continue;
     const sentClass = d.sentiment==='BULLISH'?'b-bull':d.sentiment==='BEARISH'?'b-bear':'b-neut';
     const zapHtml = d.zapalnik && d.zapalnik!=='null' ? `
       <div style="margin-top:8px;padding:7px 10px;background:rgba(255,61,85,0.06);border-left:2px solid var(--red);border-radius:5px;font-size:10px;color:var(--red)">
@@ -1622,7 +1624,7 @@ function renderSentinel(data) {
     </div>`;
   }
 
-  if (data.plan_dnia?.length) {
+  if (Array.isArray(data.plan_dnia) && data.plan_dnia.length) {
     html += `<div class="plan-card"><div class="plan-title">📋 Plan Dnia</div>`;
     data.plan_dnia.forEach((step, i) => {
       html += `<div class="plan-step"><span class="plan-num">${i+1}.</span><div>${step}</div></div>`;
@@ -1648,7 +1650,8 @@ function updateDashboardSentiment(data) {
   const meters = document.getElementById('sent-meters');
   const map = {NQ:0,CL:1,BTC:2,GOLD:3};
   const rows = meters.querySelectorAll('.sm-row');
-  for (const [inst, d] of Object.entries(data.instruments)) {
+  for (const [inst, d] of Object.entries(data.instruments || {})) {
+    if (!d) continue;
     const idx = map[inst];
     if (idx === undefined) continue;
     const fill = rows[idx].querySelector('.sm-fill');
