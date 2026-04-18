@@ -836,7 +836,7 @@ body::before {
     <div class="na-time" id="na-time">14:30</div>
     <div class="na-info">
       <div class="na-label" id="na-label">US Jobless Claims</div>
-      <div class="na-sub" id="na-sub">Wysoki wpływ — NQ, GOLD wrażliwe</div>
+      <div class="na-sub" id="na-sub">Wysoki wpływ na Twoje instrumenty</div>
       <div class="na-countdown" id="na-countdown">Obliczanie...</div>
     </div>
   </div>
@@ -852,10 +852,7 @@ body::before {
     <div class="sent-body" id="sent-main-body">
       Ładowanie analizy Sentinel... Kliknij "Uruchom Sentinel" w zakładce Sentinel lub skonfiguruj klucz API.
     </div>
-    <div class="sent-inst">
-      <span class="sent-tag b-warn">CL</span>
-      <span class="sent-tag b-neut">NQ</span>
-    </div>
+    <div class="sent-inst" id="sent-main-inst"></div>
   </div>
 
   <div class="stitle">Sentyment instrumentów</div>
@@ -929,7 +926,7 @@ body::before {
       </button>
     </div>
     <div id="report-loading" style="display:none">
-      <div class="ai-gen"><div class="ai-spinner"></div>AI generuje raport dla Wielkiej Czwórki...</div>
+      <div class="ai-gen"><div class="ai-spinner"></div>AI generuje raport dla Twoich instrumentów...</div>
     </div>
   </div>
 
@@ -938,41 +935,14 @@ body::before {
   <!-- Static fallback report -->
   <div class="report-block" id="static-report">
     <div class="report-time-hdr">
-      <div><div class="rtl">⚡ 07:00 — Europejski Setup</div><div class="rts">Czwartek, 16 kwietnia 2026</div></div>
-      <div class="badge b-live">LIVE</div>
+      <div><div class="rtl">⚡ Raport Trejdovo AI</div><div class="rts">Brak wygenerowanego raportu</div></div>
+      <div class="badge b-off">BRAK</div>
     </div>
-    <div class="report-narrative">
-      Azja zamknęła się <strong>mieszanie</strong>. Dominującym tematem jest <em>nadzieja na zawieszenie broni USA–Iran</em> — rynki reagują risk-on, ale ostrożnie. Dolar lekko osłabia, co wspiera złoto i ropę. NQ konsoliduje przed kluczowymi danymi o <strong>14:30</strong>.
+    <div style="padding:24px 16px;text-align:center;color:var(--t3)">
+      <div style="font-size:28px;margin-bottom:8px">📊</div>
+      <div style="font-size:13px;font-weight:600;color:var(--t2);margin-bottom:4px">Kliknij "⚡ GENERUJ RAPORT AI" powyżej</div>
+      <div style="font-size:11px">AI przeanalizuje Twoje instrumenty z Watchlisty i wyświetli raport tutaj</div>
     </div>
-    <table class="report-table">
-      <thead><tr>
-        <th>Instrument</th>
-        <th>Status</th>
-        <th>Co sprawdzić na TV</th>
-      </tr></thead>
-      <tbody>
-        <tr>
-          <td><div class="rt-inst"><div class="rt-dot" style="background:var(--cyan)"></div>NQ</div></td>
-          <td><span class="badge b-bear" style="margin-bottom:4px;display:inline-block">BEARISH</span><br>Kontrakty pod oporem. Dane o 14:30 kluczowe.</td>
-          <td>Sprawdź czy 18,400 trzyma jako opór. Jeśli Jobless Claims gorsze od prognoz → szukaj shorta poniżej.</td>
-        </tr>
-        <tr>
-          <td><div class="rt-inst"><div class="rt-dot" style="background:var(--amber)"></div>CL</div></td>
-          <td><span class="badge b-neut" style="margin-bottom:4px;display:inline-block">NEUTRAL</span><br>Dyplomacja Iran = neutralizuje strach o podaż.</td>
-          <td>Obserwuj strefę $90–95. Newsy pokojowe mogą zepchnąć cenę.</td>
-        </tr>
-        <tr>
-          <td><div class="rt-inst"><div class="rt-dot" style="background:var(--gold)"></div>GOLD</div></td>
-          <td><span class="badge b-bull" style="margin-bottom:4px;display:inline-block">BULLISH</span><br>Powyżej $3,200. Safe haven popyt silny.</td>
-          <td>Setup do longu przy każdym cofnięciu. Sprawdź poziom $3,180 jako wsparcie.</td>
-        </tr>
-        <tr>
-          <td><div class="rt-inst"><div class="rt-dot" style="background:var(--gold)"></div>BTC</div></td>
-          <td><span class="badge b-neut" style="margin-bottom:4px;display:inline-block">WATCH</span><br>Konsolidacja ~$83k. Brak impulsu.</td>
-          <td>Jeśli NQ wybije w górę po danych → BTC może pójść za nim. Obserwuj $85k jako opór.</td>
-        </tr>
-      </tbody>
-    </table>
   </div>
 
   <div class="report-block">
@@ -988,7 +958,7 @@ body::before {
       <div><div class="rtl">⚡ 14:30 — Reakcja na dane</div><div class="rts">Jobless Claims — generowany po publikacji</div></div>
       <div class="badge b-off">PENDING</div>
     </div>
-    <div class="report-pending"><div class="pend-time">14:35</div><p>5 minut po publikacji — AI porównuje actual vs forecast i mówi co dalej dla Twojej Czwórki.</p></div>
+    <div class="report-pending"><div class="pend-time">14:35</div><p>5 minut po publikacji — AI porównuje actual vs forecast i mówi co dalej dla Twoich instrumentów.</p></div>
   </div>
 
 </section>
@@ -1009,7 +979,7 @@ body::before {
         <div class="news-meta">
           <span>13:47 UK</span>
           <span class="ni-high">HIGH</span>
-          <span class="news-move-down">↓ NQ ↓ BTC</span>
+          <span class="news-move-down">↓ Equities ↓ Crypto</span>
         </div>
       </div>
     </div>
@@ -1021,8 +991,8 @@ body::before {
         <div class="news-meta">
           <span>13:22 UK</span>
           <span class="ni-med">MED</span>
-          <span class="news-move-down">↓ CL</span>
-          <span class="news-move-up">↑ NQ</span>
+          <span class="news-move-down">↓ Oil</span>
+          <span class="news-move-up">↑ Equities</span>
         </div>
       </div>
     </div>
@@ -1034,7 +1004,7 @@ body::before {
         <div class="news-meta">
           <span>13:05 UK</span>
           <span class="ni-med">MED</span>
-          <span class="news-move-up">↑ GOLD</span>
+          <span class="news-move-up">↑ Metals</span>
         </div>
       </div>
     </div>
@@ -1046,7 +1016,7 @@ body::before {
         <div class="news-meta">
           <span>12:48 UK</span>
           <span class="ni-low">LOW</span>
-          <span class="news-move-down">↓ BTC</span>
+          <span class="news-move-down">↓ Crypto</span>
         </div>
       </div>
     </div>
@@ -1130,7 +1100,7 @@ body::before {
   <div class="card">
     <div class="card-hdr"><span class="card-label">Alerty dzienne</span></div>
     <div class="set-row">
-      <div><div class="set-label">07:00 UK — Europejski Setup</div><div class="set-sub">Analiza Azji + narracja dnia + plan dla Czwórki</div></div>
+      <div><div class="set-label">07:00 UK — Europejski Setup</div><div class="set-sub">Analiza Azji + narracja dnia + plan dla instrumentów</div></div>
       <label class="toggle"><input type="checkbox" id="al-0700" checked><div class="tg-track"></div><div class="tg-thumb"></div></label>
     </div>
     <div class="set-row">
@@ -1204,14 +1174,7 @@ body::before {
 
     <div class="form-grp">
       <label class="form-lbl">Instrument</label>
-      <select class="f-sel" id="m-inst">
-        <option>NQ — Nasdaq Futures</option>
-        <option>CL — Crude Oil WTI</option>
-        <option>GOLD — XAU/USD</option>
-        <option>BTC — Bitcoin</option>
-        <option>ES — S&P 500</option>
-        <option>EURUSD</option>
-      </select>
+      <select class="f-sel" id="m-inst"></select>
     </div>
 
     <div class="form-grp">
@@ -2020,8 +1983,8 @@ function checkScheduledAlerts() {
   const alerts = [
     {h:7, m:0, title:'Trejdovo 07:00', body:'Europejski Setup gotowy — sprawdź zakładkę Raporty'},
     {h:14, m:0, title:'Trejdovo 14:00', body:'Pre-market USA — 30 min do danych z NYSE'},
-    {h:14, m:25, title:'⚠️ Trejdovo 14:30', body:'Za 5 minut: US Jobless Claims — wysoki wpływ na NQ, GOLD'},
-    {h:15, m:25, title:'⚠️ Trejdovo 15:30', body:'Za 5 minut: EIA Natural Gas — obserwuj CL'},
+    {h:14, m:25, title:'⚠️ Trejdovo 14:30', body:'Za 5 minut: US Jobless Claims — wysoki wpływ na Twoje instrumenty'},
+    {h:15, m:25, title:'⚠️ Trejdovo 15:30', body:'Za 5 minut: EIA Natural Gas — obserwuj Twoje instrumenty'},
   ];
 
   const match = alerts.find(a => a.h===h && a.m===m);
@@ -2082,6 +2045,7 @@ function renderDashboardInstruments() {
   const items = getWatchlist();
   const meters = document.getElementById('sent-meters');
   const instList = document.getElementById('dashboard-inst-list');
+  const mainInst = document.getElementById('sent-main-inst');
   if (meters) {
     meters.innerHTML = items.map(item => `
       <div class="sm-row">
@@ -2101,6 +2065,20 @@ function renderDashboardInstruments() {
         </div>
       </div>`).join('');
   }
+  if (mainInst) {
+    mainInst.innerHTML = items.slice(0, 4).map(item =>
+      `<span class="sent-tag b-neut" style="color:${item.color}">${item.sym}</span>`
+    ).join('');
+  }
+  refreshInstrumentDropdown();
+}
+
+function refreshInstrumentDropdown() {
+  const sel = document.getElementById('m-inst');
+  if (!sel) return;
+  const items = getWatchlist();
+  sel.innerHTML = items.map(x => `<option value="${x.sym}">${x.sym} — ${x.name}</option>`).join('') +
+    '<option value="OTHER">Inne / Other</option>';
 }
 
 function renderWatchlist() {
