@@ -1107,70 +1107,6 @@ body::before {
 
   <div class="stitle">Ostatnie trade'y</div>
 
-  <!-- TRADE 1 — GOLD WIN -->
-  <div class="trade-card">
-    <div class="tc-hdr">
-      <div class="tc-left">
-        <div class="inst-ico i-xau" style="width:26px;height:26px;font-size:10px">Au</div>
-        <span class="tc-name">GOLD</span>
-        <span class="tc-dir dir-l">LONG</span>
-      </div>
-      <div class="tc-pnl pnl-p">+$420</div>
-    </div>
-    <div class="tc-grid">
-      <div class="tc-stat"><div class="tc-sl">Entry</div><div class="tc-sv">3,187.40</div></div>
-      <div class="tc-stat"><div class="tc-sl">Exit</div><div class="tc-sv">3,221.60</div></div>
-      <div class="tc-stat"><div class="tc-sl">R:R</div><div class="tc-sv" style="color:var(--green)">1:2.8</div></div>
-      <div class="tc-stat"><div class="tc-sl">Data</div><div class="tc-sv">15.04</div></div>
-      <div class="tc-stat"><div class="tc-sl">Czas</div><div class="tc-sv">2h 14m</div></div>
-      <div class="tc-stat"><div class="tc-sl">Sesja</div><div class="tc-sv">NY</div></div>
-    </div>
-    <div class="tc-note">"Setup po CPI miss — safe haven flow. Wszedłem po reteście $3,190. Clean setup zgodnie ze strategią."</div>
-    <div class="post-mortem">
-      <div class="pm-hdr"><div class="pm-dot"></div><span class="pm-label">AI Post-Mortem</span></div>
-      <div class="pm-body">
-        <strong>Analiza:</strong> Idealny setup. Fundamenty (risk-off + słaby dolar) w pełni wspierały kierunek longu. RSI na TV potwierdzało wyprzedanie. Wejście po reteście minimalizowało ryzyko. Czas trwania 2h14m — nie zamknąłeś zbyt wcześnie.
-        <div><span class="pm-verdict good">✓ ZGODNY ZE STRATEGIĄ</span></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- TRADE 2 — CL LOSS -->
-  <div class="trade-card">
-    <div class="tc-hdr">
-      <div class="tc-left">
-        <div class="inst-ico i-cl" style="width:26px;height:26px;font-size:10px">CL</div>
-        <span class="tc-name">CL</span>
-        <span class="tc-dir dir-s">SHORT</span>
-      </div>
-      <div class="tc-pnl pnl-n">-$280</div>
-    </div>
-    <div class="tc-grid">
-      <div class="tc-stat"><div class="tc-sl">Entry</div><div class="tc-sv">93.40</div></div>
-      <div class="tc-stat"><div class="tc-sl">Exit (SL)</div><div class="tc-sv">94.76</div></div>
-      <div class="tc-stat"><div class="tc-sl">R:R</div><div class="tc-sv" style="color:var(--red)">1:0.6</div></div>
-      <div class="tc-stat"><div class="tc-sl">Data</div><div class="tc-sv">16.04</div></div>
-      <div class="tc-stat"><div class="tc-sl">Czas</div><div class="tc-sv">0h 42m</div></div>
-      <div class="tc-stat"><div class="tc-sl">Sesja</div><div class="tc-sv">London</div></div>
-    </div>
-    <div class="tc-note">"Techniczny short wyglądał świetnie — ale rynek poszedł w górę i uderzył w mój SL."</div>
-    <div class="upload-zone" onclick="document.getElementById('ss-upload').click()">
-      <div>📊 Dodaj screenshot z TradingView</div>
-      <p>AI przeanalizuje setup i powie czy był poprawny</p>
-      <small>PNG, JPG — do 10MB</small>
-    </div>
-    <input type="file" id="ss-upload" style="display:none" accept="image/*" onchange="analyzeScreenshot(this)">
-    <div class="post-mortem">
-      <div class="pm-hdr"><div class="pm-dot"></div><span class="pm-label">AI Post-Mortem — Sekcja Zwłok</span></div>
-      <div class="pm-body">
-        <strong>Co się stało:</strong> Wbiłeś technicznie poprawnego shorta na $93.40, ale rynek "wyciągnął" cenę w górę i uderzył w SL na $94.76.<br><br>
-        <strong>Dlaczego technika przegrała z rynkiem:</strong> O 15:30 były dane Financial Juice o <em>negocjacjach pokojowych Iran–USA</em> — to zmniejszyło premię geopolityczną z ceny ropy. Rynek przestał reagować na sygnały sprzedażowe bo fundamentalny "zapalnik" działał w górę.<br><br>
-        <strong>Błąd Sentinel:</strong> Financial Juice o 13:22 UK sygnalizował dyplomację. Ignorowałeś ten sygnał przez 2h przed wejściem w trade.
-        <div><span class="pm-verdict">✗ ZAPALNIK FUNDAMENTALNY AKTYWNY</span></div>
-      </div>
-    </div>
-  </div>
-
   <div id="journal-trades"></div>
 
 </section>
@@ -1328,6 +1264,23 @@ body::before {
     <div class="form-grp">
       <label class="form-lbl">P&L ($)</label>
       <input class="f-input" type="number" id="m-pnl" placeholder="+420 lub -180">
+    </div>
+
+    <div class="form-row" style="margin-bottom:12px">
+      <div class="form-grp" style="margin-bottom:0">
+        <label class="form-lbl">Data trade</label>
+        <input class="f-input" type="date" id="m-date">
+      </div>
+      <div class="form-grp" style="margin-bottom:0">
+        <label class="form-lbl">Sesja</label>
+        <select class="f-sel" id="m-session">
+          <option value="London">London</option>
+          <option value="NY">New York</option>
+          <option value="Asia">Asia</option>
+          <option value="Pre-Market">Pre-Market</option>
+          <option value="Overnight">Overnight</option>
+        </select>
+      </div>
     </div>
 
     <div class="form-grp">
@@ -1872,6 +1825,15 @@ async function analyzeScreenshot(input) {
 // ─── MODAL ───
 let selectedDir = 'L';
 function openModal() {
+  // Reset form
+  document.getElementById('m-inst').selectedIndex = 0;
+  document.getElementById('m-entry').value = '';
+  document.getElementById('m-exit').value = '';
+  document.getElementById('m-pnl').value = '';
+  document.getElementById('m-note').value = '';
+  document.getElementById('m-session').value = 'London';
+  document.getElementById('m-date').value = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD
+  selDir('L');
   document.getElementById('modal-overlay').classList.add('open');
 }
 function closeModal() {
@@ -1896,16 +1858,23 @@ async function saveTrade() {
   const btn = document.getElementById('save-btn');
   btn.disabled = true; btn.textContent = 'Zapisuję...';
 
+  const pnlVal = document.getElementById('m-pnl').value;
+  if (!pnlVal) { alert('Wpisz P&L trade.'); btn.disabled = false; btn.textContent = 'ZAPISZ TRADE + URUCHOM POST-MORTEM AI'; return; }
+
+  const rawDate = document.getElementById('m-date').value; // YYYY-MM-DD
+  const displayDate = rawDate ? new Date(rawDate + 'T12:00:00').toLocaleDateString('pl') : new Date().toLocaleDateString('pl');
+
   const trade = {
     id: Date.now(),
     instrument: document.getElementById('m-inst').value,
     direction: selectedDir,
     entry: document.getElementById('m-entry').value,
     exit: document.getElementById('m-exit').value,
-    pnl: document.getElementById('m-pnl').value,
+    pnl: pnlVal,
     note: document.getElementById('m-note').value,
-    date: new Date().toLocaleDateString('pl'),
-    time: new Date().toLocaleTimeString('pl', {timeZone:'Europe/London'})
+    session: document.getElementById('m-session').value,
+    date: displayDate,
+    rawDate: rawDate || new Date().toLocaleDateString('en-CA')
   };
 
   // Save to localStorage (Firebase will replace this)
@@ -1919,7 +1888,7 @@ async function saveTrade() {
     try {
       const pmText = await callClaude(
         `Jesteś agentem Post-Mortem dla Trejdovo. Analizujesz zamknięty trade i konfrontujesz go z aktualną sytuacją rynkową. Odpowiadaj po polsku, max 80 słów.`,
-        `Trade: ${trade.instrument} ${trade.direction==='L'?'LONG':'SHORT'}, Entry: ${trade.entry}, Exit: ${trade.exit}, P&L: ${trade.pnl}, Notatka tradera: "${trade.note}"\n\nKontekst rynkowy: ${buildTodayContext()}\n\nOceń: czy fundamenty wspierały ten trade? Jaki był błąd lub co poszło dobrze?`,
+        `Trade: ${trade.instrument} ${trade.direction==='L'?'LONG':'SHORT'}, Entry: ${trade.entry||'?'}, Exit: ${trade.exit||'?'}, P&L: $${trade.pnl}, Sesja: ${trade.session||'?'}, Data: ${trade.date}, Notatka tradera: "${trade.note}"\n\nKontekst rynkowy: ${buildTodayContext()}\n\nOceń: czy fundamenty wspierały ten trade? Jaki był błąd lub co poszło dobrze?`,
         400
       );
       trade.postmortem = pmText;
@@ -1939,9 +1908,12 @@ function loadJournalTrades() {
   const trades = JSON.parse(localStorage.getItem('tj_trades') || '[]');
   const container = document.getElementById('journal-trades');
 
-  // Stats from real trade data
+  // Stats from real trade data (use rawDate if available, fall back to date string)
   const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
-  const week = trades.filter(t => new Date(t.date) >= weekAgo);
+  const week = trades.filter(t => {
+    const d = t.rawDate ? new Date(t.rawDate + 'T12:00:00') : new Date(t.date);
+    return d >= weekAgo;
+  });
   const wins = week.filter(t => parseFloat(t.pnl) > 0);
   const losses = week.filter(t => parseFloat(t.pnl) < 0);
   const totalPnl = week.reduce((s, t) => s + parseFloat(t.pnl||0), 0);
@@ -1955,16 +1927,26 @@ function loadJournalTrades() {
   document.getElementById('js-pnl').style.color = pnlColor;
   document.getElementById('js-rr').textContent = '—';
 
-  if (!trades.length) { container.innerHTML = ''; return; }
+  if (!trades.length) {
+    container.innerHTML = `<div style="text-align:center;padding:32px 16px;color:var(--t3)">
+      <div style="font-size:28px;margin-bottom:8px">📋</div>
+      <div style="font-size:13px;font-weight:600;color:var(--t2);margin-bottom:4px">Brak zapisanych tradów</div>
+      <div style="font-size:11px">Kliknij + aby dodać pierwszy trade</div>
+    </div>`;
+    return;
+  }
 
-  container.innerHTML = `<div class="stitle">Twoje zapisane trade'y</div>` + trades.slice(0,5).map(t => `
-  <div class="trade-card">
+  container.innerHTML = trades.slice(0, 20).map(t => {
+    const pnl = parseFloat(t.pnl);
+    const isWin = pnl >= 0;
+    return `<div class="trade-card">
     <div class="tc-hdr">
       <div class="tc-left">
         <span class="tc-name">${t.instrument.split(' ')[0]}</span>
         <span class="tc-dir ${t.direction==='L'?'dir-l':'dir-s'}">${t.direction==='L'?'LONG':'SHORT'}</span>
+        ${t.session ? `<span style="font-size:9px;color:var(--t3);font-family:var(--mono);background:var(--bg3);padding:2px 6px;border-radius:4px">${t.session}</span>` : ''}
       </div>
-      <div class="tc-pnl ${parseFloat(t.pnl)>=0?'pnl-p':'pnl-n'}">${parseFloat(t.pnl)>=0?'+':''}$${Math.abs(t.pnl)}</div>
+      <div class="tc-pnl ${isWin?'pnl-p':'pnl-n'}">${isWin?'+':''}$${Math.abs(pnl).toFixed(0)}</div>
     </div>
     <div class="tc-grid">
       <div class="tc-stat"><div class="tc-sl">Entry</div><div class="tc-sv">${t.entry||'—'}</div></div>
@@ -1972,12 +1954,12 @@ function loadJournalTrades() {
       <div class="tc-stat"><div class="tc-sl">Data</div><div class="tc-sv">${t.date}</div></div>
     </div>
     ${t.note ? `<div class="tc-note">"${t.note}"</div>` : ''}
-    ${t.postmortem ? `
-    <div class="post-mortem">
+    ${t.postmortem ? `<div class="post-mortem">
       <div class="pm-hdr"><div class="pm-dot"></div><span class="pm-label">AI Post-Mortem</span></div>
       <div class="pm-body">${t.postmortem}</div>
     </div>` : ''}
-  </div>`).join('');
+  </div>`;
+  }).join('');
 }
 
 // ─── PUSH NOTIFICATIONS ───
