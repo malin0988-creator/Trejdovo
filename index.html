@@ -1508,7 +1508,7 @@ async function callClaude(systemPrompt, userMsg, maxTokens = 1200) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       apiKey: ANTHROPIC_API_KEY,
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-5',
       max_tokens: maxTokens,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMsg }]
@@ -1519,6 +1519,7 @@ async function callClaude(systemPrompt, userMsg, maxTokens = 1200) {
     throw new Error(err.error?.message || `API error ${resp.status}`);
   }
   const data = await resp.json();
+  if (data?.type === 'error') throw new Error(data.error?.message || 'Błąd API');
   let text;
   if (Array.isArray(data?.content)) {
     text = data.content.map(b => b.text || '').join('');
@@ -1531,7 +1532,7 @@ async function callClaude(systemPrompt, userMsg, maxTokens = 1200) {
   } else if (typeof data?.response === 'string') {
     text = data.response;
   }
-  if (!text) throw new Error('Błąd proxy: pusta lub nieznana odpowiedź (' + JSON.stringify(data).slice(0, 120) + ')');
+  if (!text) throw new Error('Błąd proxy: nieznany format (' + JSON.stringify(data).slice(0, 120) + ')');
   return text;
 }
 
@@ -1793,7 +1794,7 @@ async function analyzeScreenshot(input) {
         headers:{'Content-Type':'application/json'},
         body: JSON.stringify({
           apiKey: ANTHROPIC_API_KEY,
-          model:'claude-sonnet-4-20250514',
+          model:'claude-sonnet-4-5',
           max_tokens:500,
           system: SCREENSHOT_SYSTEM,
           messages:[{role:'user', content:[
