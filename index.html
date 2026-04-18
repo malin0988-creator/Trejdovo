@@ -858,41 +858,15 @@ body::before {
     </div>
   </div>
 
-  <div class="stitle">Sentyment Wielkiej Czwórki</div>
+  <div class="stitle">Sentyment instrumentów</div>
 
   <div class="card">
-    <div class="sent-meter" id="sent-meters">
-      <div class="sm-row"><span class="sm-lbl">NQ</span><div class="sm-track"><div class="sm-fill sf-bear" style="width:35%"></div></div><span class="sm-tag" style="color:var(--red)">BEAR</span></div>
-      <div class="sm-row"><span class="sm-lbl">CL</span><div class="sm-track"><div class="sm-fill sf-neut" style="width:50%"></div></div><span class="sm-tag" style="color:var(--amber)">NEUT</span></div>
-      <div class="sm-row"><span class="sm-lbl">BTC</span><div class="sm-track"><div class="sm-fill sf-bear" style="width:38%"></div></div><span class="sm-tag" style="color:var(--red)">BEAR</span></div>
-      <div class="sm-row"><span class="sm-lbl">GOLD</span><div class="sm-track"><div class="sm-fill sf-bull" style="width:78%"></div></div><span class="sm-tag" style="color:var(--green)">BULL</span></div>
-    </div>
+    <div class="sent-meter" id="sent-meters"></div>
     <div style="padding:6px 0 2px; font-size:10px; color:var(--t3); font-family:var(--mono); text-align:right" id="sent-updated">Ostatnia aktualizacja: brak</div>
   </div>
 
   <div class="stitle">Instrumenty</div>
-  <div class="card">
-    <div class="inst-row" onclick="switchTo('raporty')">
-      <div class="inst-ico i-nq">NQ</div>
-      <div class="inst-info"><div class="inst-name">NQ</div><div class="inst-sub">Nasdaq 100 Futures</div></div>
-      <div class="inst-right"><div class="inst-sent sent-bear">BEARISH</div><div class="inst-note">Pod kluczowym oporem</div></div>
-    </div>
-    <div class="inst-row" onclick="switchTo('raporty')">
-      <div class="inst-ico i-cl">CL</div>
-      <div class="inst-info"><div class="inst-name">CL</div><div class="inst-sub">Crude Oil WTI</div></div>
-      <div class="inst-right"><div class="inst-sent sent-neut">NEUTRAL</div><div class="inst-note">Dyplomacja vs podaż</div></div>
-    </div>
-    <div class="inst-row" onclick="switchTo('raporty')">
-      <div class="inst-ico i-btc">₿</div>
-      <div class="inst-info"><div class="inst-name">BTC</div><div class="inst-sub">Bitcoin / USD</div></div>
-      <div class="inst-right"><div class="inst-sent sent-bear">BEARISH</div><div class="inst-note">Śledzi NQ</div></div>
-    </div>
-    <div class="inst-row" onclick="switchTo('raporty')">
-      <div class="inst-ico i-xau">Au</div>
-      <div class="inst-info"><div class="inst-name">GOLD</div><div class="inst-sub">XAU / USD</div></div>
-      <div class="inst-right"><div class="inst-sent sent-bull">BULLISH</div><div class="inst-note">Safe haven — silny</div></div>
-    </div>
-  </div>
+  <div class="card" id="dashboard-inst-list"></div>
 
   <div class="stitle">Ten tydzień</div>
   <div class="stats-grid">
@@ -936,7 +910,7 @@ body::before {
   <div class="card">
     <div style="font-size:12px; color:var(--t2); line-height:1.7">
       <p style="margin-bottom:8px">Sentinel codziennie (lub na żądanie) robi następujące rzeczy:</p>
-      <p style="margin-bottom:6px; padding-left:12px; border-left:2px solid var(--cyan)"><strong style="color:var(--text)">1. Skanuje newsy</strong> — czyta Financial Juice i ocenia wpływ każdej informacji na Twoją Wielką Czwórkę.</p>
+      <p style="margin-bottom:6px; padding-left:12px; border-left:2px solid var(--cyan)"><strong style="color:var(--text)">1. Skanuje newsy</strong> — czyta Financial Juice i ocenia wpływ każdej informacji na Twoje wybrane instrumenty.</p>
       <p style="margin-bottom:6px; padding-left:12px; border-left:2px solid var(--amber)"><strong style="color:var(--text)">2. Wykrywa zapalniki</strong> — jeśli jest aktywny geopolityczny lub makroekonomiczny "zapalnik" (np. blokada cieśniny, decyzja Fed), ostrzega Cię PRZED wejściem w trade.</p>
       <p style="margin-bottom:6px; padding-left:12px; border-left:2px solid var(--purple)"><strong style="color:var(--text)">3. Konfrontuje z techniką</strong> — mówi czy fundamenty wspierają lub blokują sygnał z TradingView.</p>
       <p style="padding-left:12px; border-left:2px solid var(--green)"><strong style="color:var(--text)">4. Daje plan dnia</strong> — konkretne kroki: co sprawdzić na TV, kiedy czekać, kiedy być gotowy.</p>
@@ -1092,7 +1066,7 @@ body::before {
     <div class="card" id="news-ai-content"></div>
   </div>
 
-  <button class="btn-primary" onclick="analyzeNews()" id="analyze-news-btn">🧠 ANALIZUJ WPŁYW NA WIELKĄ CZWÓRKĘ</button>
+  <button class="btn-primary" onclick="analyzeNews()" id="analyze-news-btn">🧠 ANALIZUJ WPŁYW NA WYBRANE INSTRUMENTY</button>
 
 </section>
 
@@ -1581,23 +1555,27 @@ async function callClaude(systemPrompt, userMsg, maxTokens = 1200) {
 }
 
 // ─── SENTINEL ───
-const SENTINEL_SYSTEM = `Jesteś Sentinel — AI agent strażnik rynku dla aplikacji Trejdovo.
+function buildSentinelSystem() {
+  const items = getWatchlist();
+  const instList = items.map(x => `${x.sym} (${x.name})`).join(', ');
+  const instJson = items.map(x =>
+    `    "${x.sym}": { "sentiment": "BULLISH"|"BEARISH"|"NEUTRAL", "score": 0-100, "signal": "WAIT"|"WATCH"|"READY", "reason": "max 2 zdania po polsku", "zapalnik": "null lub opis zapalnika fundamentalnego" }`
+  ).join(',\n');
+  return `Jesteś Sentinel — AI agent strażnik rynku dla aplikacji Trejdovo.
 
-Twoja rola: Analizujesz aktualną sytuację makroekonomiczną i newsy pod kątem ich wpływu na 4 instrumenty: NQ (Nasdaq Futures), CL (Crude Oil WTI), GOLD (XAU/USD), BTC (Bitcoin).
+Twoja rola: Analizujesz aktualną sytuację makroekonomiczną i newsy pod kątem ich wpływu na instrumenty: ${instList}.
 
 Odpowiadaj TYLKO w formacie JSON, bez żadnego tekstu przed ani po:
 {
   "overall": "RISK-ON" | "RISK-OFF" | "MIXED",
   "overall_reason": "Krótkie wyjaśnienie (max 1 zdanie)",
   "instruments": {
-    "NQ":   { "sentiment": "BULLISH"|"BEARISH"|"NEUTRAL", "score": 0-100, "signal": "WAIT"|"WATCH"|"READY", "reason": "max 2 zdania po polsku", "zapalnik": "null lub opis zapalnika fundamentalnego" },
-    "CL":   { "sentiment": "BULLISH"|"BEARISH"|"NEUTRAL", "score": 0-100, "signal": "WAIT"|"WATCH"|"READY", "reason": "max 2 zdania", "zapalnik": "null lub opis zapalnika" },
-    "GOLD": { "sentiment": "BULLISH"|"BEARISH"|"NEUTRAL", "score": 0-100, "signal": "WAIT"|"WATCH"|"READY", "reason": "max 2 zdania", "zapalnik": "null lub opis zapalnika" },
-    "BTC":  { "sentiment": "BULLISH"|"BEARISH"|"NEUTRAL", "score": 0-100, "signal": "WAIT"|"WATCH"|"READY", "reason": "max 2 zdania", "zapalnik": "null lub opis zapalnika" }
+${instJson}
   },
   "plan_dnia": ["krok 1 (max 1 zdanie)", "krok 2", "krok 3"],
-  "setup_alert": "null lub opis potencjalnego setupu np. 'GOLD long — fundamenty wspierają, czekaj na retestt $3,200 na TV'"
+  "setup_alert": "null lub opis potencjalnego setupu"
 }`;
+}
 
 
 async function runSentinel() {
@@ -1611,7 +1589,7 @@ async function runSentinel() {
   results.innerHTML = '';
 
   try {
-    const raw = await callClaude(SENTINEL_SYSTEM, buildTodayContext(), 1200);
+    const raw = await callClaude(buildSentinelSystem(), buildTodayContext(), 1200);
     const clean = raw.replace(/```json|```/g, '').trim();
     const data = JSON.parse(clean);
     renderSentinel(data);
@@ -1641,7 +1619,8 @@ function renderSentinel(data) {
     </div>
   </div>`;
 
-  const instColors = {NQ:'var(--cyan)',CL:'var(--amber)',GOLD:'#ffd700',BTC:'var(--gold)'};
+  const wlMap = {}; getWatchlist().forEach(x => wlMap[x.sym] = x.color);
+  const instColors = new Proxy(wlMap, {get:(t,k) => t[k] || 'var(--t2)'});
   const signalColors = {WAIT:'var(--t3)',WATCH:'var(--amber)',READY:'var(--green)'};
 
   for (const [inst, d] of Object.entries(data.instruments || {})) {
@@ -1689,36 +1668,40 @@ function renderSentinel(data) {
 }
 
 function updateDashboardSentiment(data) {
-  const meters = document.getElementById('sent-meters');
-  const map = {NQ:0,CL:1,BTC:2,GOLD:3};
-  const rows = meters.querySelectorAll('.sm-row');
+  const sentColor = s => s==='BULLISH'?'var(--green)':s==='BEARISH'?'var(--red)':'var(--amber)';
+  const sentClass = s => s==='BULLISH'?'sf-bull':s==='BEARISH'?'sf-bear':'sf-neut';
+  const sentInst  = s => s==='BULLISH'?'sent-bull':s==='BEARISH'?'sent-bear':'sent-neut';
   for (const [inst, d] of Object.entries(data.instruments || {})) {
     if (!d) continue;
-    const idx = map[inst];
-    if (idx === undefined) continue;
-    const fill = rows[idx].querySelector('.sm-fill');
-    const tag = rows[idx].querySelector('.sm-tag');
-    fill.className = 'sm-fill ' + (d.sentiment==='BULLISH'?'sf-bull':d.sentiment==='BEARISH'?'sf-bear':'sf-neut');
-    fill.style.width = d.score + '%';
-    tag.textContent = d.sentiment.substring(0,4);
-    tag.style.color = d.sentiment==='BULLISH'?'var(--green)':d.sentiment==='BEARISH'?'var(--red)':'var(--amber)';
+    const fill = document.getElementById('sm-fill-' + inst);
+    const tag  = document.getElementById('sm-tag-'  + inst);
+    if (fill) { fill.className = 'sm-fill ' + sentClass(d.sentiment); fill.style.width = d.score + '%'; }
+    if (tag)  { tag.textContent = d.sentiment.substring(0,4); tag.style.color = sentColor(d.sentiment); }
+    const sentEl = document.getElementById('ds-sent-' + inst);
+    const noteEl = document.getElementById('ds-note-' + inst);
+    if (sentEl) { sentEl.className = 'inst-sent ' + sentInst(d.sentiment); sentEl.textContent = d.sentiment; }
+    if (noteEl) noteEl.textContent = d.reason ? d.reason.split('.')[0] : '—';
   }
 }
 
 // ─── REPORT GENERATOR ───
-const REPORT_SYSTEM = `Jesteś agentem raportującym Trejdovo. Generujesz dzienny raport tradingowy dla 4 instrumentów: NQ, CL, GOLD, BTC.
+function buildReportSystem() {
+  const items = getWatchlist();
+  const instList = items.map(x => x.sym).join(', ');
+  const tableJson = items.map(x =>
+    `    { "instrument": "${x.sym}", "status": "Krótki opis 1-2 zdania", "badge": "BULLISH"|"BEARISH"|"NEUTRAL"|"WATCH", "tv_action": "Co sprawdzić na TradingView" }`
+  ).join(',\n');
+  return `Jesteś agentem raportującym Trejdovo. Generujesz dzienny raport tradingowy dla instrumentów: ${instList}.
 
 Odpowiadaj TYLKO w formacie JSON:
 {
   "narracja": "2-3 zdania opisujące główny temat dnia rynkowego, po polsku",
   "tabela": [
-    { "instrument": "NQ", "status": "Krótki opis 1-2 zdania", "badge": "BULLISH"|"BEARISH"|"NEUTRAL"|"WATCH", "tv_action": "Co sprawdzić na TradingView — konkretny poziom lub wskaźnik" },
-    { "instrument": "CL", ... },
-    { "instrument": "GOLD", ... },
-    { "instrument": "BTC", ... }
+${tableJson}
   ],
   "alert_claude_code": "Wskazówka dla Claude Code na MT5 — czego unikać lub na co uważać"
 }`;
+}
 
 async function generateReport() {
   const btn = document.getElementById('report-gen-btn');
@@ -1730,7 +1713,7 @@ async function generateReport() {
   loading.style.display = 'block';
 
   try {
-    const raw = await callClaude(REPORT_SYSTEM, buildTodayContext() + '\n\nWygeneruj raport zbiorczy 07:00–14:35 UK.', 1000);
+    const raw = await callClaude(buildReportSystem(), buildTodayContext() + '\n\nWygeneruj raport zbiorczy 07:00–14:35 UK.', 1000);
     const clean = raw.replace(/```json|```/g,'').trim();
     const data = JSON.parse(clean);
     renderReport(data, output);
@@ -1745,7 +1728,8 @@ async function generateReport() {
 
 function renderReport(data, container) {
   const badgeClass = b => b==='BULLISH'?'b-bull':b==='BEARISH'?'b-bear':b==='NEUTRAL'?'b-neut':'b-warn';
-  const dotColor = inst => ({NQ:'var(--cyan)',CL:'var(--amber)',GOLD:'#ffd700',BTC:'var(--gold)'}[inst] || 'var(--t2)');
+  const wlColors = {}; getWatchlist().forEach(x => wlColors[x.sym] = x.color);
+  const dotColor = inst => wlColors[inst] || 'var(--t2)';
   const now = new Date().toLocaleString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit', day:'numeric', month:'long', year:'numeric'});
 
   let rows = (data.tabela || []).map(r => `
@@ -1775,7 +1759,10 @@ function renderReport(data, container) {
 }
 
 // ─── NEWS ANALYSIS ───
-const NEWS_SYSTEM = `Analizujesz newsy finansowe pod kątem wpływu na NQ, CL, GOLD i BTC. Odpowiadaj po polsku, zwięźle. Max 150 słów łącznie. Format: dla każdego instrumentu jedna linijka z oceną wpływu.`;
+function buildNewsSystem() {
+  const syms = getWatchlist().map(x => x.sym).join(', ');
+  return `Analizujesz newsy finansowe pod kątem wpływu na: ${syms}. Odpowiadaj po polsku, zwięźle. Max 150 słów łącznie. Format: dla każdego instrumentu jedna linijka z oceną wpływu.`;
+}
 
 async function analyzeNews() {
   const btn = document.getElementById('analyze-news-btn');
@@ -1785,7 +1772,7 @@ async function analyzeNews() {
   btn.disabled = true; btn.textContent = 'Analizuję...';
 
   try {
-    const text = await callClaude(NEWS_SYSTEM, buildTodayContext(), 500);
+    const text = await callClaude(buildNewsSystem(), buildTodayContext(), 500);
     area.style.display = 'block';
     content.innerHTML = `<div style="font-size:12px;color:var(--t2);line-height:1.7;white-space:pre-wrap">${text}</div>`;
   } catch(e) {
@@ -1793,7 +1780,7 @@ async function analyzeNews() {
     area.style.display = 'block';
   }
 
-  btn.disabled = false; btn.textContent = '🧠 ANALIZUJ WPŁYW NA WIELKĄ CZWÓRKĘ';
+  btn.disabled = false; btn.textContent = '🧠 ANALIZUJ WPŁYW NA WYBRANE INSTRUMENTY';
 }
 
 // ─── SCREENSHOT ANALYSIS ───
@@ -2091,6 +2078,31 @@ function formatWlPrice(p) {
   return p.toFixed(4);
 }
 
+function renderDashboardInstruments() {
+  const items = getWatchlist();
+  const meters = document.getElementById('sent-meters');
+  const instList = document.getElementById('dashboard-inst-list');
+  if (meters) {
+    meters.innerHTML = items.map(item => `
+      <div class="sm-row">
+        <span class="sm-lbl" style="color:${item.color}">${item.sym}</span>
+        <div class="sm-track"><div class="sm-fill sf-neut" id="sm-fill-${item.sym}" style="width:50%"></div></div>
+        <span class="sm-tag" id="sm-tag-${item.sym}" style="color:var(--amber)">NEUT</span>
+      </div>`).join('');
+  }
+  if (instList) {
+    instList.innerHTML = items.map(item => `
+      <div class="inst-row" onclick="switchTo('raporty')">
+        <div class="inst-ico" style="background:${item.color}22;color:${item.color};border-radius:8px">${item.sym.substring(0,3)}</div>
+        <div class="inst-info"><div class="inst-name">${item.sym}</div><div class="inst-sub">${item.name}</div></div>
+        <div class="inst-right">
+          <div class="inst-sent sent-neut" id="ds-sent-${item.sym}">NEUTRAL</div>
+          <div class="inst-note" id="ds-note-${item.sym}">Uruchom Sentinel</div>
+        </div>
+      </div>`).join('');
+  }
+}
+
 function renderWatchlist() {
   const grid = document.getElementById('wl-grid');
   if (!grid) return;
@@ -2206,6 +2218,7 @@ function saveInstrument() {
   saveWatchlist(items);
   closeWlModal();
   renderWatchlist();
+  renderDashboardInstruments();
   startWlRefresh();
 }
 
@@ -2214,6 +2227,7 @@ function removeInstrument(idx) {
   items.splice(idx, 1);
   saveWatchlist(items);
   renderWatchlist();
+  renderDashboardInstruments();
   startWlRefresh();
 }
 
@@ -2221,6 +2235,7 @@ function removeInstrument(idx) {
 loadJournalTrades();
 loadCalendar();
 renderWatchlist();
+renderDashboardInstruments();
 startWlRefresh();
 </script>
 </body>
