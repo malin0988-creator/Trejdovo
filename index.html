@@ -968,67 +968,13 @@ body::before {
 
   <div class="card">
     <div class="card-hdr">
-      <span class="card-label">Financial Juice — Live Feed</span>
-      <div class="badge b-live">● LIVE</div>
+      <span class="card-label">Newsy Rynkowe — Live</span>
+      <div class="badge b-live" id="news-feed-badge">● LIVE</div>
     </div>
-
-    <div class="news-item">
-      <div class="news-dot" style="background:var(--red)"></div>
-      <div>
-        <div class="news-hl">Fed's Powell: No rush to cut rates — data-dependent through 2026</div>
-        <div class="news-meta">
-          <span>13:47 UK</span>
-          <span class="ni-high">HIGH</span>
-          <span class="news-move-down">↓ Equities ↓ Crypto</span>
-        </div>
-      </div>
+    <div id="news-feed-list" style="min-height:80px">
+      <div style="color:var(--t3);font-size:12px;padding:16px 0;text-align:center">Ładowanie newsów…</div>
     </div>
-
-    <div class="news-item">
-      <div class="news-dot" style="background:var(--amber)"></div>
-      <div>
-        <div class="news-hl">Iran–US ceasefire talks progressing — Hormuz threat easing</div>
-        <div class="news-meta">
-          <span>13:22 UK</span>
-          <span class="ni-med">MED</span>
-          <span class="news-move-down">↓ Oil</span>
-          <span class="news-move-up">↑ Equities</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="news-item">
-      <div class="news-dot" style="background:var(--green)"></div>
-      <div>
-        <div class="news-hl">Gold breaks $3,200 — dollar weakness supports fresh highs</div>
-        <div class="news-meta">
-          <span>13:05 UK</span>
-          <span class="ni-med">MED</span>
-          <span class="news-move-up">↑ Metals</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="news-item">
-      <div class="news-dot" style="background:var(--t3)"></div>
-      <div>
-        <div class="news-hl">Bitcoin ETF outflows: $180M in 24h — selling pressure persists</div>
-        <div class="news-meta">
-          <span>12:48 UK</span>
-          <span class="ni-low">LOW</span>
-          <span class="news-move-down">↓ Crypto</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="news-item">
-      <div class="news-dot" style="background:var(--t3)"></div>
-      <div>
-        <div class="news-hl">ECB holds — confirms gradual easing pace, EUR stable</div>
-        <div class="news-meta"><span>12:15 UK</span><span class="ni-low">LOW</span></div>
-      </div>
-    </div>
-
+    <div style="padding:6px 0 2px;font-size:10px;color:var(--t3);font-family:var(--mono);text-align:right" id="news-updated">—</div>
   </div>
 
   <div id="news-ai-analysis" style="display:none">
@@ -1429,6 +1375,8 @@ function switchTo(id) {
   const map = ['dashboard','sentinel','raporty','newsy','kalendarz','journal','watchlist','ustawienia'];
   btns[map.indexOf(id)]?.classList.add('on');
   document.getElementById('fab').classList.toggle('hidden', id !== 'journal' && id !== 'dashboard');
+  if (id === 'dashboard') renderDashboardInstruments();
+  if (id === 'newsy' && Date.now() - lastNewsLoad > 300000) loadNews();
 }
 
 // ─── API KEY ───
@@ -1722,6 +1670,61 @@ function renderReport(data, container) {
 }
 
 // ─── NEWS ANALYSIS ───
+let lastNewsLoad = 0;
+
+async function loadNews() {
+  const container = document.getElementById('news-feed-list');
+  const badge     = document.getElementById('news-feed-badge');
+  const updated   = document.getElementById('news-updated');
+  if (!container) return;
+
+  const rssUrl   = 'https://feeds.finance.yahoo.com/rss/2.0/headline?s=SPY,QQQ,GC=F,CL=F,BTC-USD&region=US&lang=en-US&count=20';
+  const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(rssUrl);
+
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 10000);
+    const resp = await fetch(proxyUrl, {signal: ctrl.signal});
+    clearTimeout(t);
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const text = await resp.text();
+    const xml   = new DOMParser().parseFromString(text, 'text/xml');
+    const items = Array.from(xml.querySelectorAll('item')).slice(0, 12);
+    if (!items.length) throw new Error('Brak danych');
+
+    const dotColor = title => {
+      const t = title.toLowerCase();
+      if (t.includes('fed') || t.includes('rate') || t.includes('inflation')) return 'var(--red)';
+      if (t.includes('oil') || t.includes('opec') || t.includes('energy'))   return 'var(--amber)';
+      if (t.includes('gold') || t.includes('dollar') || t.includes('haven')) return 'var(--green)';
+      if (t.includes('bitcoin') || t.includes('crypto') || t.includes('btc')) return 'var(--gold)';
+      return 'var(--t3)';
+    };
+
+    container.innerHTML = items.map(item => {
+      const title   = item.querySelector('title')?.textContent || '';
+      const pubDate = item.querySelector('pubDate')?.textContent || '';
+      const timeStr = pubDate
+        ? new Date(pubDate).toLocaleTimeString('pl', {hour:'2-digit', minute:'2-digit', timeZone:'Europe/London'})
+        : '—';
+      return `<div class="news-item">
+        <div class="news-dot" style="background:${dotColor(title)}"></div>
+        <div>
+          <div class="news-hl">${title}</div>
+          <div class="news-meta"><span>${timeStr} UK</span><span class="ni-med">NEWS</span></div>
+        </div>
+      </div>`;
+    }).join('');
+
+    lastNewsLoad = Date.now();
+    if (badge)   { badge.textContent = '● LIVE'; badge.className = 'badge b-live'; }
+    if (updated) updated.textContent = 'Aktualizacja: ' + new Date().toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
+  } catch(e) {
+    container.innerHTML = `<div style="color:var(--t3);font-size:11px;padding:12px 0;text-align:center">Nie można pobrać newsów: ${e.message}</div>`;
+    if (badge) { badge.textContent = 'Offline'; badge.className = 'badge b-off'; }
+  }
+}
+
 function buildNewsSystem() {
   const syms = getWatchlist().map(x => x.sym).join(', ');
   return `Analizujesz newsy finansowe pod kątem wpływu na: ${syms}. Odpowiadaj po polsku, zwięźle. Max 150 słów łącznie. Format: dla każdego instrumentu jedna linijka z oceną wpływu.`;
@@ -2112,15 +2115,28 @@ async function fetchBinancePrice(apiSym) {
 }
 
 async function fetchYahooPrice(apiSym) {
-  const r = await fetch('https://query2.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(apiSym) + '?interval=1d&range=2d');
-  if (!r.ok) throw new Error('Yahoo ' + r.status);
-  const d = await r.json();
-  const meta = d.chart?.result?.[0]?.meta;
-  if (!meta) throw new Error('No data');
-  const price = meta.regularMarketPrice;
-  const prev  = meta.chartPreviousClose || meta.previousClose;
-  const changePct = prev ? ((price - prev) / prev * 100) : 0;
-  return {price, changePct};
+  const chartUrl = 'https://query2.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(apiSym) + '?interval=1d&range=2d';
+  const urls = [
+    chartUrl,
+    'https://api.allorigins.win/raw?url=' + encodeURIComponent(chartUrl),
+  ];
+  for (const url of urls) {
+    try {
+      const ctrl = new AbortController();
+      const t = setTimeout(() => ctrl.abort(), 7000);
+      const r = await fetch(url, {signal: ctrl.signal});
+      clearTimeout(t);
+      if (!r.ok) continue;
+      const d = await r.json();
+      const meta = d.chart?.result?.[0]?.meta;
+      if (!meta?.regularMarketPrice) continue;
+      const price = meta.regularMarketPrice;
+      const prev  = meta.chartPreviousClose || meta.previousClose;
+      const changePct = prev ? ((price - prev) / prev * 100) : 0;
+      return {price, changePct};
+    } catch(e) { continue; }
+  }
+  throw new Error('Unavailable: ' + apiSym);
 }
 
 async function refreshWatchlistPrices() {
@@ -2138,6 +2154,7 @@ async function refreshWatchlistPrices() {
       chgEl.textContent = (up ? '+' : '') + changePct.toFixed(2) + '%';
       chgEl.className   = 'wl-chg ' + (up ? 'chg-p' : 'chg-n');
     } catch(e) {
+      priceEl.textContent = '—';
       chgEl.textContent = 'ERR';
       chgEl.className   = 'wl-chg chg-n';
     }
@@ -2212,6 +2229,7 @@ function removeInstrument(idx) {
 // ─── INIT ───
 loadJournalTrades();
 loadCalendar();
+loadNews();
 renderWatchlist();
 renderDashboardInstruments();
 startWlRefresh();
