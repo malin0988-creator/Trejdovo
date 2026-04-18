@@ -1519,7 +1519,7 @@ async function callClaude(systemPrompt, userMsg, maxTokens = 1200) {
     throw new Error(err.error?.message || `API error ${resp.status}`);
   }
   const data = await resp.json();
-  return data.content.map(b => b.text || '').join('');
+  return (data.content || []).map(b => b.text || '').join('');
 }
 
 // ─── SENTINEL ───
@@ -1703,7 +1703,7 @@ function renderReport(data, container) {
   const dotColor = inst => ({NQ:'var(--cyan)',CL:'var(--amber)',GOLD:'#ffd700',BTC:'var(--gold)'}[inst] || 'var(--t2)');
   const now = new Date().toLocaleString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit', day:'numeric', month:'long', year:'numeric'});
 
-  let rows = data.tabela.map(r => `
+  let rows = (data.tabela || []).map(r => `
     <tr>
       <td><div class="rt-inst"><div class="rt-dot" style="background:${dotColor(r.instrument)}"></div>${r.instrument}</div></td>
       <td><span class="badge ${badgeClass(r.badge)}" style="margin-bottom:4px;display:inline-block">${r.badge}</span><br>${r.status}</td>
