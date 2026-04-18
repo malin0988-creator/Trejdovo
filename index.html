@@ -1087,55 +1087,10 @@ body::before {
 
   <div class="card">
     <div class="card-hdr">
-      <span class="card-label">16 Kwiecień 2026</span>
-      <span class="badge b-live">Dziś</span>
+      <span class="card-label" id="cal-date-label">Dziś</span>
+      <span class="badge b-live" id="cal-status-badge">Ładowanie...</span>
     </div>
-
-    <div class="cal-row">
-      <span class="cal-time past">07:00</span>
-      <div class="cal-bar cb-l"></div>
-      <div class="cal-info">
-        <div class="cal-name">German CPI (Final)</div>
-        <div class="cal-vals"><span>Prognoza: 0.3%</span><span class="cv-actual cv-beat">✓ Actual: 0.4%</span></div>
-      </div>
-    </div>
-
-    <div class="cal-row">
-      <span class="cal-time past">10:00</span>
-      <div class="cal-bar cb-m"></div>
-      <div class="cal-info">
-        <div class="cal-name">Eurozone Industrial Production</div>
-        <div class="cal-vals"><span>Prognoza: -0.1%</span><span class="cv-actual cv-miss">✗ Actual: -0.5%</span></div>
-      </div>
-    </div>
-
-    <div class="cal-row">
-      <span class="cal-time alert">14:30 ⚠️</span>
-      <div class="cal-bar cb-h"></div>
-      <div class="cal-info">
-        <div class="cal-name">US Jobless Claims</div>
-        <div class="cal-vals"><span>Prognoza: 225K</span><span style="color:var(--t3)">Oczekuje...</span></div>
-      </div>
-    </div>
-
-    <div class="cal-row">
-      <span class="cal-time">14:30</span>
-      <div class="cal-bar cb-m"></div>
-      <div class="cal-info">
-        <div class="cal-name">Philadelphia Fed Manufacturing</div>
-        <div class="cal-vals"><span>Prognoza: 3.0</span><span style="color:var(--t3)">Oczekuje...</span></div>
-      </div>
-    </div>
-
-    <div class="cal-row">
-      <span class="cal-time alert">15:30 ⚠️</span>
-      <div class="cal-bar cb-h"></div>
-      <div class="cal-info">
-        <div class="cal-name">EIA Natural Gas Storage</div>
-        <div class="cal-vals"><span>Prognoza: -38B</span><span style="color:var(--t3)">Oczekuje...</span><span class="badge b-warn">CL ALERT</span></div>
-      </div>
-    </div>
-
+    <div id="calendar-events" style="color:var(--t3);font-size:12px;padding:8px 0">Ładowanie kalendarza...</div>
   </div>
 
 </section>
@@ -1144,10 +1099,10 @@ body::before {
 <section class="sec" id="sec-journal">
 
   <div class="stats-grid">
-    <div class="stat-box"><div class="sb-label">Trade'y</div><div class="sb-val">11</div><div class="sb-sub">ten tydzień</div></div>
-    <div class="stat-box"><div class="sb-label">Win rate</div><div class="sb-val" style="color:var(--green)">64%</div><div class="sb-sub">7W / 4L</div></div>
-    <div class="stat-box"><div class="sb-label">Avg R:R</div><div class="sb-val">1:1.9</div><div class="sb-sub">cel: 1:2.0</div></div>
-    <div class="stat-box"><div class="sb-label">P&L</div><div class="sb-val" style="color:var(--green)">+$840</div><div class="sb-sub">tygodniowy</div></div>
+    <div class="stat-box"><div class="sb-label">Trade'y</div><div class="sb-val" id="js-trades">—</div><div class="sb-sub">ten tydzień</div></div>
+    <div class="stat-box"><div class="sb-label">Win rate</div><div class="sb-val" id="js-winrate">—</div><div class="sb-sub" id="js-wl">—</div></div>
+    <div class="stat-box"><div class="sb-label">Avg R:R</div><div class="sb-val" id="js-rr">—</div><div class="sb-sub">cel: 1:2.0</div></div>
+    <div class="stat-box"><div class="sb-label">P&L</div><div class="sb-val" id="js-pnl">—</div><div class="sb-sub">tygodniowy</div></div>
   </div>
 
   <div class="stitle">Ostatnie trade'y</div>
@@ -1406,12 +1361,122 @@ function updateClock() {
   updateCountdown(uk);
 }
 // ─── COUNTDOWN ───
-const ALERTS = [
+let ALERTS = [
   {h:7, m:0, label:'Europejski Setup', sub:'Analiza Azji + narracja dnia'},
   {h:14, m:0, label:'Pre-market USA', sub:'Scenariusze przed danymi'},
-  {h:14, m:30, label:'US Jobless Claims', sub:'Wysoki wpływ — NQ, GOLD wrażliwe'},
-  {h:15, m:30, label:'EIA Natural Gas', sub:'Ważny dla CL — obserwuj'}
 ];
+
+// ─── LIVE MACRO CALENDAR (Forex Factory) ───
+let calendarData = [];
+
+async function loadCalendar() {
+  const container = document.getElementById('calendar-events');
+  const badge = document.getElementById('cal-status-badge');
+  const label = document.getElementById('cal-date-label');
+
+  const today = new Date();
+  label.textContent = today.toLocaleDateString('pl', {timeZone:'Europe/London', day:'numeric', month:'long', year:'numeric'});
+
+  try {
+    const resp = await fetch('https://nfs.faireconomy.media/ff_calendar_thisweek.json?t=' + Date.now());
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const all = await resp.json();
+
+    const todayUK = new Date().toLocaleDateString('en-CA', {timeZone:'Europe/London'}); // YYYY-MM-DD
+    const relevant = all.filter(e => {
+      const d = new Date(e.date);
+      const eDay = d.toLocaleDateString('en-CA', {timeZone:'Europe/London'});
+      return eDay === todayUK && (e.impact === 'High' || e.impact === 'Medium');
+    }).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    calendarData = relevant;
+    badge.textContent = 'Live';
+    badge.className = 'badge b-live';
+
+    if (relevant.length === 0) {
+      container.innerHTML = '<div style="color:var(--t3);font-size:12px;padding:8px 0">Brak ważnych wydarzeń makro na dziś.</div>';
+      return;
+    }
+
+    const now = new Date();
+    container.innerHTML = relevant.map(e => {
+      const eDate = new Date(e.date);
+      const ukTime = eDate.toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
+      const isPast = eDate < now;
+      const isHigh = e.impact === 'High';
+      const timeClass = isPast ? 'cal-time past' : isHigh ? 'cal-time alert' : 'cal-time';
+      const barClass = isHigh ? 'cal-bar cb-h' : 'cal-bar cb-m';
+
+      let vals = '';
+      if (e.forecast) vals += `<span>Prognoza: ${e.forecast}</span>`;
+      if (e.actual) {
+        const fNum = parseFloat(e.forecast);
+        const aNum = parseFloat(e.actual);
+        const beat = !isNaN(fNum) && !isNaN(aNum) && aNum > fNum;
+        const miss = !isNaN(fNum) && !isNaN(aNum) && aNum < fNum;
+        const cls = beat ? 'cv-actual cv-beat' : miss ? 'cv-actual cv-miss' : 'cv-actual';
+        vals += `<span class="${cls}">${beat?'✓':miss?'✗':''} Actual: ${e.actual}</span>`;
+      } else {
+        vals += `<span style="color:var(--t3)">Oczekuje...</span>`;
+        if (isHigh) vals += `<span class="badge b-warn">HIGH</span>`;
+      }
+
+      return `<div class="cal-row">
+        <span class="${timeClass}">${ukTime}${isHigh && !isPast ? ' ⚠️' : ''}</span>
+        <div class="${barClass}"></div>
+        <div class="cal-info">
+          <div class="cal-name">${e.title} <span style="font-size:10px;color:var(--t3);margin-left:4px">${e.country}</span></div>
+          <div class="cal-vals">${vals}</div>
+        </div>
+      </div>`;
+    }).join('');
+
+    // Rebuild ALERTS from high-impact events + base alerts
+    const calAlerts = relevant.filter(e => e.impact === 'High').map(e => {
+      const d = new Date(e.date);
+      return {
+        h: parseInt(d.toLocaleTimeString('en-GB', {timeZone:'Europe/London', hour:'2-digit', hour12:false})),
+        m: parseInt(d.toLocaleTimeString('en-GB', {timeZone:'Europe/London', minute:'2-digit'})),
+        label: e.title,
+        sub: `${e.country} — Wysoki wpływ`
+      };
+    });
+    const base = [{h:7,m:0,label:'Europejski Setup',sub:'Analiza Azji + narracja dnia'},{h:14,m:0,label:'Pre-market USA',sub:'Scenariusze przed danymi'}];
+    ALERTS = [...base, ...calAlerts].sort((a, b) => a.h*60+a.m - (b.h*60+b.m));
+
+  } catch(err) {
+    badge.textContent = 'Offline';
+    badge.className = 'badge b-warn';
+    container.innerHTML = `<div style="color:var(--t3);font-size:12px;padding:8px 0">Błąd ładowania kalendarza: ${err.message}</div>`;
+  }
+}
+
+// ─── DYNAMIC TODAY CONTEXT ───
+function buildTodayContext() {
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('pl', {timeZone:'Europe/London', weekday:'long', year:'numeric', month:'long', day:'numeric'});
+  const timeStr = now.toLocaleTimeString('pl', {timeZone:'Europe/London'});
+
+  let calStr = calendarData.length
+    ? calendarData.map(e => {
+        const d = new Date(e.date);
+        const t = d.toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
+        const impact = e.impact === 'High' ? 'HIGH IMPACT' : 'MED IMPACT';
+        const result = e.actual
+          ? `actual: ${e.actual} (prognoza ${e.forecast||'?'}) — ${parseFloat(e.actual)>parseFloat(e.forecast||'0')?'BEAT ✓':'MISS ✗'}`
+          : `OCZEKUJE (prognoza ${e.forecast||'?'}) ⚠️ ${impact}`;
+        return `- ${t} ${e.title} (${e.country}) — ${result}`;
+      }).join('\n')
+    : '- Brak danych z kalendarza makro na dziś';
+
+  return `DATA: ${dateStr}, godzina UK: ${timeStr}
+
+NEWSY Z FINANCIAL JUICE (dziś):
+[Brak automatycznego feedu — trader dodaje ręcznie w zakładce Newsy]
+
+KALENDARZ MAKRO DZIŚ:
+${calStr}`;
+}
 
 setInterval(updateClock, 1000);
 updateClock();
@@ -1555,21 +1620,6 @@ Odpowiadaj TYLKO w formacie JSON, bez żadnego tekstu przed ani po:
   "setup_alert": "null lub opis potencjalnego setupu np. 'GOLD long — fundamenty wspierają, czekaj na retestt $3,200 na TV'"
 }`;
 
-const TODAY_CONTEXT = `DATA: 16 Kwiecień 2026, godzina UK: ${new Date().toLocaleTimeString('pl', {timeZone:'Europe/London'})}
-
-NEWSY Z FINANCIAL JUICE (dziś):
-- 13:47 Fed Powell: "No rush to cut rates, data-dependent" — HIGH IMPACT
-- 13:22 Iran-US ceasefire talks progressing, Hormuz threat easing — MED IMPACT
-- 13:05 Gold breaks $3,200, dollar weakness — MED IMPACT
-- 12:48 Bitcoin ETF outflows $180M in 24h — LOW IMPACT
-- 12:15 ECB holds rates, gradual easing confirmed — LOW IMPACT
-
-KALENDARZ MAKRO DZIŚ:
-- 07:00 German CPI actual: 0.4% (prognoza 0.3%) — BEAT ✓
-- 10:00 Eurozone Industrial Production: -0.5% (prognoza -0.1%) — MISS ✗
-- 14:30 US Jobless Claims — OCZEKUJE (prognoza 225K) ⚠️ HIGH IMPACT
-- 14:30 Philadelphia Fed Manufacturing — OCZEKUJE
-- 15:30 EIA Natural Gas Storage — OCZEKUJE ⚠️ WAŻNE DLA CL`;
 
 async function runSentinel() {
   const btn = document.getElementById('sentinel-run-btn');
@@ -1582,7 +1632,7 @@ async function runSentinel() {
   results.innerHTML = '';
 
   try {
-    const raw = await callClaude(SENTINEL_SYSTEM, TODAY_CONTEXT, 1200);
+    const raw = await callClaude(SENTINEL_SYSTEM, buildTodayContext(), 1200);
     const clean = raw.replace(/```json|```/g, '').trim();
     const data = JSON.parse(clean);
     renderSentinel(data);
@@ -1701,7 +1751,7 @@ async function generateReport() {
   loading.style.display = 'block';
 
   try {
-    const raw = await callClaude(REPORT_SYSTEM, TODAY_CONTEXT + '\n\nWygeneruj raport zbiorczy 07:00–14:35 UK.', 1000);
+    const raw = await callClaude(REPORT_SYSTEM, buildTodayContext() + '\n\nWygeneruj raport zbiorczy 07:00–14:35 UK.', 1000);
     const clean = raw.replace(/```json|```/g,'').trim();
     const data = JSON.parse(clean);
     renderReport(data, output);
@@ -1756,7 +1806,7 @@ async function analyzeNews() {
   btn.disabled = true; btn.textContent = 'Analizuję...';
 
   try {
-    const text = await callClaude(NEWS_SYSTEM, TODAY_CONTEXT, 500);
+    const text = await callClaude(NEWS_SYSTEM, buildTodayContext(), 500);
     area.style.display = 'block';
     content.innerHTML = `<div style="font-size:12px;color:var(--t2);line-height:1.7;white-space:pre-wrap">${text}</div>`;
   } catch(e) {
@@ -1869,7 +1919,7 @@ async function saveTrade() {
     try {
       const pmText = await callClaude(
         `Jesteś agentem Post-Mortem dla Trejdovo. Analizujesz zamknięty trade i konfrontujesz go z aktualną sytuacją rynkową. Odpowiadaj po polsku, max 80 słów.`,
-        `Trade: ${trade.instrument} ${trade.direction==='L'?'LONG':'SHORT'}, Entry: ${trade.entry}, Exit: ${trade.exit}, P&L: ${trade.pnl}, Notatka tradera: "${trade.note}"\n\nKontekst rynkowy: ${TODAY_CONTEXT}\n\nOceń: czy fundamenty wspierały ten trade? Jaki był błąd lub co poszło dobrze?`,
+        `Trade: ${trade.instrument} ${trade.direction==='L'?'LONG':'SHORT'}, Entry: ${trade.entry}, Exit: ${trade.exit}, P&L: ${trade.pnl}, Notatka tradera: "${trade.note}"\n\nKontekst rynkowy: ${buildTodayContext()}\n\nOceń: czy fundamenty wspierały ten trade? Jaki był błąd lub co poszło dobrze?`,
         400
       );
       trade.postmortem = pmText;
@@ -1888,6 +1938,23 @@ async function saveTrade() {
 function loadJournalTrades() {
   const trades = JSON.parse(localStorage.getItem('tj_trades') || '[]');
   const container = document.getElementById('journal-trades');
+
+  // Stats from real trade data
+  const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
+  const week = trades.filter(t => new Date(t.date) >= weekAgo);
+  const wins = week.filter(t => parseFloat(t.pnl) > 0);
+  const losses = week.filter(t => parseFloat(t.pnl) < 0);
+  const totalPnl = week.reduce((s, t) => s + parseFloat(t.pnl||0), 0);
+  const wr = week.length ? Math.round(wins.length/week.length*100) : 0;
+  const pnlColor = totalPnl >= 0 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('js-trades').textContent = week.length || '0';
+  document.getElementById('js-winrate').textContent = week.length ? wr+'%' : '—';
+  document.getElementById('js-winrate').style.color = wr >= 50 ? 'var(--green)' : 'var(--red)';
+  document.getElementById('js-wl').textContent = week.length ? `${wins.length}W / ${losses.length}L` : 'brak tradów';
+  document.getElementById('js-pnl').textContent = week.length ? (totalPnl>=0?'+':'')+'$'+Math.abs(totalPnl).toFixed(0) : '—';
+  document.getElementById('js-pnl').style.color = pnlColor;
+  document.getElementById('js-rr').textContent = '—';
+
   if (!trades.length) { container.innerHTML = ''; return; }
 
   container.innerHTML = `<div class="stitle">Twoje zapisane trade'y</div>` + trades.slice(0,5).map(t => `
@@ -1952,6 +2019,7 @@ setInterval(checkScheduledAlerts, 5000);
 
 // ─── INIT ───
 loadJournalTrades();
+loadCalendar();
 </script>
 </body>
 </html>
