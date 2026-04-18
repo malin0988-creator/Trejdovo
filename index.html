@@ -1451,7 +1451,7 @@ function switchTo(id) {
 }
 
 // ─── API KEY ───
-let ANTHROPIC_API_KEY = localStorage.getItem('tj_apikey') || '';
+let ANTHROPIC_API_KEY = localStorage.getItem('anthropic_api_key') || '';
 
 function saveApiKey() {
   // Try both inputs
@@ -1465,7 +1465,7 @@ function saveApiKey() {
   }
   
   ANTHROPIC_API_KEY = v;
-  localStorage.setItem('tj_apikey', v);
+  localStorage.setItem('anthropic_api_key', v);
   
   // Update status pill
   const spAi = document.getElementById('sp-ai');
