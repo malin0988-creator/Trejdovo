@@ -562,6 +562,20 @@ body::before {
 .chg-n { background:rgba(255,61,85,0.08); color:var(--red); }
 .wl-price { font-family:var(--mono); font-size:17px; font-weight:700; margin-bottom:2px; }
 .wl-name { font-size:10px; color:var(--t3); }
+.wl-remove {
+  position:absolute; top:8px; right:8px;
+  background:none; border:none; color:var(--t3);
+  font-size:15px; cursor:pointer; padding:2px 5px;
+  opacity:0; transition:opacity 0.15s; line-height:1; z-index:1;
+}
+.wl-card:hover .wl-remove { opacity:1; }
+.wl-colors { display:flex; gap:8px; margin-top:6px; flex-wrap:wrap; }
+.wl-color-opt {
+  width:24px; height:24px; border-radius:50%; cursor:pointer;
+  border:2px solid transparent; transition:border-color 0.15s;
+}
+.wl-color-opt.selected { border-color:white; }
+.wl-loading { color:var(--t3); font-family:var(--mono); font-size:11px; }
 
 /* ─── SETTINGS ─── */
 .set-row {
@@ -1117,31 +1131,10 @@ body::before {
 <section class="sec" id="sec-watchlist">
 
   <div class="stitle">Aktywne instrumenty</div>
-  <div class="wl-grid">
-    <div class="wl-card active">
-      <div class="wl-top"><span class="wl-sym" style="color:var(--cyan)">NQ</span><span class="wl-chg chg-n">-0.82%</span></div>
-      <div class="wl-price">18,320</div>
-      <div class="wl-name">Nasdaq Futures</div>
-    </div>
-    <div class="wl-card active">
-      <div class="wl-top"><span class="wl-sym" style="color:var(--amber)">CL</span><span class="wl-chg chg-p">+0.34%</span></div>
-      <div class="wl-price">93.14</div>
-      <div class="wl-name">Crude Oil WTI</div>
-    </div>
-    <div class="wl-card active">
-      <div class="wl-top"><span class="wl-sym" style="color:var(--gold)">BTC</span><span class="wl-chg chg-n">-1.20%</span></div>
-      <div class="wl-price">83,440</div>
-      <div class="wl-name">Bitcoin / USD</div>
-    </div>
-    <div class="wl-card active">
-      <div class="wl-top"><span class="wl-sym" style="color:#ffd700">GOLD</span><span class="wl-chg chg-p">+0.61%</span></div>
-      <div class="wl-price">3,218</div>
-      <div class="wl-name">XAU / USD</div>
-    </div>
-    <div class="wl-card" onclick="addInstrument()">
-      <div class="wl-top"><span class="wl-sym" style="color:var(--t3)">+</span></div>
-      <div class="wl-price" style="color:var(--t3);font-size:13px">Dodaj walor</div>
-      <div class="wl-name">ES, EUR/USD, ETH...</div>
+  <div class="wl-grid" id="wl-grid">
+    <div class="wl-card" style="opacity:0.5;pointer-events:none">
+      <div class="wl-top"><span class="wl-sym wl-loading">Ładowanie...</span></div>
+      <div class="wl-price wl-loading">—</div><div class="wl-name">—</div>
     </div>
   </div>
 
@@ -1301,6 +1294,37 @@ body::before {
     </div>
 
     <button class="btn-primary" id="save-btn" onclick="saveTrade()">ZAPISZ TRADE + URUCHOM POST-MORTEM AI</button>
+  </div>
+</div>
+
+<!-- ADD INSTRUMENT MODAL -->
+<div class="overlay" id="wl-overlay" onclick="wlOverlayClose(event)">
+  <div class="modal">
+    <div class="modal-title">
+      Dodaj walor — Watchlist
+      <button class="m-close" onclick="closeWlModal()">✕</button>
+    </div>
+    <div class="form-grp">
+      <label class="form-lbl">Symbol (np. ETH, ES, AAPL, EUR/USD)</label>
+      <input class="f-input" type="text" id="wl-new-sym" placeholder="ETH, ES, AAPL, EURUSD..." oninput="wlSymInput(this)" autocomplete="off" autocapitalize="characters">
+    </div>
+    <div class="form-grp">
+      <label class="form-lbl">Nazwa (opcjonalnie)</label>
+      <input class="f-input" type="text" id="wl-new-name" placeholder="Ethereum / USD">
+    </div>
+    <div class="form-grp">
+      <label class="form-lbl">Kolor</label>
+      <div class="wl-colors" id="wl-color-picker">
+        <div class="wl-color-opt selected" data-color="var(--cyan)"  style="background:var(--cyan)"  onclick="selectWlColor(this)"></div>
+        <div class="wl-color-opt"          data-color="var(--amber)" style="background:var(--amber)" onclick="selectWlColor(this)"></div>
+        <div class="wl-color-opt"          data-color="var(--green)" style="background:var(--green)" onclick="selectWlColor(this)"></div>
+        <div class="wl-color-opt"          data-color="var(--red)"   style="background:var(--red)"   onclick="selectWlColor(this)"></div>
+        <div class="wl-color-opt"          data-color="#ffd700"      style="background:#ffd700"      onclick="selectWlColor(this)"></div>
+        <div class="wl-color-opt"          data-color="#a78bfa"      style="background:#a78bfa"      onclick="selectWlColor(this)"></div>
+      </div>
+    </div>
+    <div style="font-size:10px;color:var(--t3);margin-bottom:16px" id="wl-api-hint">Crypto (BTC,ETH…): Binance • Futures/Stocks/Forex: Yahoo Finance</div>
+    <button class="btn-primary" onclick="saveInstrument()" style="width:100%">DODAJ DO WATCHLIST</button>
   </div>
 </div>
 
@@ -2003,9 +2027,177 @@ function checkScheduledAlerts() {
 }
 setInterval(checkScheduledAlerts, 5000);
 
+// ─── WATCHLIST ───
+const WL_DEFAULTS = [
+  {sym:'NQ',   name:'Nasdaq Futures', color:'var(--cyan)',  type:'yahoo',   apiSym:'NQ=F'},
+  {sym:'CL',   name:'Crude Oil WTI',  color:'var(--amber)', type:'yahoo',   apiSym:'CL=F'},
+  {sym:'BTC',  name:'Bitcoin / USD',  color:'var(--gold)',  type:'binance', apiSym:'BTCUSDT'},
+  {sym:'GOLD', name:'XAU / USD',      color:'#ffd700',      type:'yahoo',   apiSym:'GC=F'},
+];
+
+const CRYPTO_SYMS = new Set(['BTC','ETH','SOL','BNB','XRP','DOGE','ADA','AVAX','LINK','DOT','LTC','MATIC','SHIB','UNI','ATOM']);
+const FUTURES_MAP = {NQ:'NQ=F',ES:'ES=F',CL:'CL=F',GOLD:'GC=F',GC:'GC=F',SI:'SI=F',NG:'NG=F',RTY:'RTY=F',YM:'YM=F',ZB:'ZB=F',ZN:'ZN=F'};
+const FOREX_SUBS  = {'EUR/USD':'EURUSD=X','GBP/USD':'GBPUSD=X','USD/JPY':'USDJPY=X','EUR/JPY':'EURJPY=X','AUD/USD':'AUDUSD=X','USD/CAD':'USDCAD=X'};
+const KNOWN_NAMES = {
+  NQ:'Nasdaq Futures',ES:'S&P 500 Futures',CL:'Crude Oil WTI',GC:'Gold Futures',
+  GOLD:'XAU / USD',SI:'Silver Futures',NG:'Natural Gas',RTY:'Russell 2000',YM:'Dow Futures',
+  BTC:'Bitcoin / USD',ETH:'Ethereum / USD',SOL:'Solana / USD',BNB:'BNB / USD',
+  XRP:'XRP / USD',DOGE:'Dogecoin / USD',ADA:'Cardano / USD',AVAX:'Avalanche / USD',
+  LINK:'Chainlink / USD',DOT:'Polkadot / USD',LTC:'Litecoin / USD',MATIC:'Polygon / USD',
+  'EUR/USD':'Euro / Dollar','GBP/USD':'Pound / Dollar','USD/JPY':'Dollar / Yen',
+  AAPL:'Apple Inc.',TSLA:'Tesla Inc.',MSFT:'Microsoft',AMZN:'Amazon',META:'Meta',NVDA:'Nvidia',
+};
+
+function getWatchlist() {
+  try { return JSON.parse(localStorage.getItem('tj_watchlist')) || WL_DEFAULTS; }
+  catch { return WL_DEFAULTS; }
+}
+function saveWatchlist(items) { localStorage.setItem('tj_watchlist', JSON.stringify(items)); }
+
+function detectApiConfig(sym) {
+  if (CRYPTO_SYMS.has(sym))   return {type:'binance', apiSym: sym + 'USDT'};
+  if (FUTURES_MAP[sym])        return {type:'yahoo',   apiSym: FUTURES_MAP[sym]};
+  if (FOREX_SUBS[sym])         return {type:'yahoo',   apiSym: FOREX_SUBS[sym]};
+  return {type:'yahoo', apiSym: sym};
+}
+
+function formatWlPrice(p) {
+  if (p >= 1000) return p.toLocaleString('en-US', {maximumFractionDigits:0});
+  if (p >= 10)   return p.toFixed(2);
+  return p.toFixed(4);
+}
+
+function renderWatchlist() {
+  const grid = document.getElementById('wl-grid');
+  if (!grid) return;
+  const items = getWatchlist();
+  grid.innerHTML = items.map((item, i) => `
+    <div class="wl-card active" id="wl-card-${i}">
+      <button class="wl-remove" onclick="removeInstrument(${i})" title="Usuń">×</button>
+      <div class="wl-top">
+        <span class="wl-sym" style="color:${item.color}">${item.sym}</span>
+        <span class="wl-chg wl-loading" id="wl-chg-${i}">…</span>
+      </div>
+      <div class="wl-price" id="wl-price-${i}">—</div>
+      <div class="wl-name">${item.name}</div>
+    </div>
+  `).join('') + `
+    <div class="wl-card" onclick="addInstrument()">
+      <div class="wl-top"><span class="wl-sym" style="color:var(--t3)">+</span></div>
+      <div class="wl-price" style="color:var(--t3);font-size:13px">Dodaj walor</div>
+      <div class="wl-name">ES, EUR/USD, ETH…</div>
+    </div>
+  `;
+}
+
+async function fetchBinancePrice(apiSym) {
+  const r = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=' + apiSym);
+  if (!r.ok) throw new Error('Binance ' + r.status);
+  const d = await r.json();
+  return {price: parseFloat(d.lastPrice), changePct: parseFloat(d.priceChangePercent)};
+}
+
+async function fetchYahooPrice(apiSym) {
+  const r = await fetch('https://query2.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(apiSym) + '?interval=1d&range=2d');
+  if (!r.ok) throw new Error('Yahoo ' + r.status);
+  const d = await r.json();
+  const meta = d.chart?.result?.[0]?.meta;
+  if (!meta) throw new Error('No data');
+  const price = meta.regularMarketPrice;
+  const prev  = meta.chartPreviousClose || meta.previousClose;
+  const changePct = prev ? ((price - prev) / prev * 100) : 0;
+  return {price, changePct};
+}
+
+async function refreshWatchlistPrices() {
+  const items = getWatchlist();
+  for (let i = 0; i < items.length; i++) {
+    const priceEl = document.getElementById('wl-price-' + i);
+    const chgEl   = document.getElementById('wl-chg-'   + i);
+    if (!priceEl || !chgEl) continue;
+    try {
+      const {price, changePct} = items[i].type === 'binance'
+        ? await fetchBinancePrice(items[i].apiSym)
+        : await fetchYahooPrice(items[i].apiSym);
+      priceEl.textContent = formatWlPrice(price);
+      const up = changePct >= 0;
+      chgEl.textContent = (up ? '+' : '') + changePct.toFixed(2) + '%';
+      chgEl.className   = 'wl-chg ' + (up ? 'chg-p' : 'chg-n');
+    } catch(e) {
+      chgEl.textContent = 'ERR';
+      chgEl.className   = 'wl-chg chg-n';
+    }
+  }
+}
+
+let wlRefreshTimer = null;
+function startWlRefresh() {
+  refreshWatchlistPrices();
+  if (wlRefreshTimer) clearInterval(wlRefreshTimer);
+  wlRefreshTimer = setInterval(refreshWatchlistPrices, 30000);
+}
+
+function addInstrument() {
+  const ov = document.getElementById('wl-overlay');
+  if (!ov) return;
+  document.getElementById('wl-new-sym').value  = '';
+  document.getElementById('wl-new-name').value = '';
+  document.getElementById('wl-api-hint').textContent = 'Crypto (BTC,ETH…): Binance • Futures/Stocks/Forex: Yahoo Finance';
+  document.querySelectorAll('.wl-color-opt').forEach((el,i) => el.classList.toggle('selected', i === 0));
+  ov.classList.add('open');
+  setTimeout(() => document.getElementById('wl-new-sym').focus(), 100);
+}
+function closeWlModal()  { document.getElementById('wl-overlay').classList.remove('open'); }
+function wlOverlayClose(e) { if (e.target === document.getElementById('wl-overlay')) closeWlModal(); }
+
+function selectWlColor(el) {
+  document.querySelectorAll('.wl-color-opt').forEach(o => o.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function wlSymInput(input) {
+  input.value = input.value.toUpperCase();
+  const sym = input.value.trim();
+  const nameEl = document.getElementById('wl-new-name');
+  if (nameEl && KNOWN_NAMES[sym]) nameEl.value = KNOWN_NAMES[sym];
+  const hint = document.getElementById('wl-api-hint');
+  if (hint && sym) {
+    const cfg = detectApiConfig(sym);
+    hint.textContent = cfg.type === 'binance'
+      ? '✓ Crypto — Binance API (' + cfg.apiSym + ')'
+      : '✓ Market — Yahoo Finance (' + cfg.apiSym + ')';
+  }
+}
+
+function saveInstrument() {
+  const sym = (document.getElementById('wl-new-sym').value || '').trim().toUpperCase();
+  if (!sym) { document.getElementById('wl-new-sym').focus(); return; }
+  const name = (document.getElementById('wl-new-name').value || '').trim() || sym;
+  const colorEl = document.querySelector('.wl-color-opt.selected');
+  const color = colorEl ? colorEl.dataset.color : 'var(--t2)';
+  const cfg = detectApiConfig(sym);
+  const items = getWatchlist();
+  if (items.some(x => x.sym === sym)) { closeWlModal(); return; }
+  items.push({sym, name, color, ...cfg});
+  saveWatchlist(items);
+  closeWlModal();
+  renderWatchlist();
+  startWlRefresh();
+}
+
+function removeInstrument(idx) {
+  const items = getWatchlist();
+  items.splice(idx, 1);
+  saveWatchlist(items);
+  renderWatchlist();
+  startWlRefresh();
+}
+
 // ─── INIT ───
 loadJournalTrades();
 loadCalendar();
+renderWatchlist();
+startWlRefresh();
 </script>
 </body>
 </html>
