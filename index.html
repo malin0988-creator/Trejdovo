@@ -1233,41 +1233,92 @@ let calendarData = [];
 
 async function loadCalendar() {
   const container = document.getElementById('calendar-events');
-  const badge = document.getElementById('cal-status-badge');
-  const label = document.getElementById('cal-date-label');
+  const badge     = document.getElementById('cal-status-badge');
+  const label     = document.getElementById('cal-date-label');
 
-  const today = new Date();
-  label.textContent = today.toLocaleDateString('pl', {timeZone:'Europe/London', day:'numeric', month:'long', year:'numeric'});
+  const now    = new Date();
+  const ukNow  = new Date(now.toLocaleString('en-US', {timeZone:'Europe/London'}));
+  const dow    = ukNow.getDay(); // 0=Sun 6=Sat
+  const isWeekend = dow === 0 || dow === 6;
+
+  label.textContent = now.toLocaleDateString('pl', {timeZone:'Europe/London', day:'numeric', month:'long', year:'numeric'});
+
+  // Next Monday helpers
+  const daysToMon   = dow === 0 ? 1 : dow === 6 ? 2 : 0;
+  const nextMonDate = new Date(ukNow);
+  nextMonDate.setDate(ukNow.getDate() + daysToMon);
+  const nextMonKey  = nextMonDate.toLocaleDateString('en-CA', {timeZone:'Europe/London'});
+  const nextMonLabel = nextMonDate.toLocaleDateString('pl', {timeZone:'Europe/London', weekday:'long', day:'numeric', month:'long'});
 
   try {
     const resp = await fetch('https://nfs.faireconomy.media/ff_calendar_thisweek.json?t=' + Date.now());
     if (!resp.ok) throw new Error('HTTP ' + resp.status);
     const all = await resp.json();
 
-    const todayUK = new Date().toLocaleDateString('en-CA', {timeZone:'Europe/London'}); // YYYY-MM-DD
+    // ── WEEKEND branch ──
+    if (isWeekend) {
+      badge.textContent = 'Weekend';
+      badge.className   = 'badge b-warn';
+
+      const monEvents = all.filter(e => {
+        const eDay = new Date(e.date).toLocaleDateString('en-CA', {timeZone:'Europe/London'});
+        return eDay === nextMonKey && (e.impact === 'High' || e.impact === 'Medium');
+      }).sort((a, b) => new Date(a.date) - new Date(b.date));
+
+      let html = `
+        <div style="text-align:center;padding:16px 0 12px;color:var(--t3)">
+          <div style="font-size:24px;margin-bottom:6px">🌙</div>
+          <div style="font-size:13px;font-weight:600;color:var(--t2)">Rynki zamknięte — weekend</div>
+          <div style="font-size:11px;margin-top:4px">Następne sesje: <strong style="color:var(--t2)">${nextMonLabel}</strong></div>
+        </div>`;
+
+      if (monEvents.length) {
+        html += `<div style="font-size:10px;color:var(--t3);font-family:var(--mono);text-transform:uppercase;letter-spacing:0.8px;margin:4px 0 8px;padding-top:10px;border-top:1px solid var(--border)">Kluczowe wydarzenia w poniedziałek</div>`;
+        html += monEvents.map(e => {
+          const ukTime = new Date(e.date).toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
+          const isHigh = e.impact === 'High';
+          return `<div class="cal-row">
+            <span class="cal-time${isHigh ? ' alert' : ''}">${ukTime}${isHigh ? ' ⚠️' : ''}</span>
+            <div class="${isHigh ? 'cal-bar cb-h' : 'cal-bar cb-m'}"></div>
+            <div class="cal-info">
+              <div class="cal-name">${e.title} <span style="font-size:10px;color:var(--t3);margin-left:4px">${e.country}</span></div>
+              <div class="cal-vals"><span style="color:var(--t3)">Prognoza: ${e.forecast || '—'}</span>${isHigh ? '<span class="badge b-warn" style="margin-left:4px">HIGH</span>' : ''}</div>
+            </div>
+          </div>`;
+        }).join('');
+      } else {
+        html += `<div style="color:var(--t3);font-size:11px;padding:8px 0;text-align:center">Brak danych o wydarzeniach na poniedziałek.</div>`;
+      }
+
+      container.innerHTML = html;
+      calendarData = [];
+      return;
+    }
+
+    // ── WEEKDAY branch ──
+    const todayUK = now.toLocaleDateString('en-CA', {timeZone:'Europe/London'});
     const relevant = all.filter(e => {
-      const d = new Date(e.date);
-      const eDay = d.toLocaleDateString('en-CA', {timeZone:'Europe/London'});
+      const eDay = new Date(e.date).toLocaleDateString('en-CA', {timeZone:'Europe/London'});
       return eDay === todayUK && (e.impact === 'High' || e.impact === 'Medium');
     }).sort((a, b) => new Date(a.date) - new Date(b.date));
 
     calendarData = relevant;
     badge.textContent = 'Live';
-    badge.className = 'badge b-live';
+    badge.className   = 'badge b-live';
 
     if (relevant.length === 0) {
       container.innerHTML = '<div style="color:var(--t3);font-size:12px;padding:8px 0">Brak ważnych wydarzeń makro na dziś.</div>';
       return;
     }
 
-    const now = new Date();
+    const nowTs = new Date();
     container.innerHTML = relevant.map(e => {
-      const eDate = new Date(e.date);
-      const ukTime = eDate.toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
-      const isPast = eDate < now;
-      const isHigh = e.impact === 'High';
+      const eDate    = new Date(e.date);
+      const ukTime   = eDate.toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
+      const isPast   = eDate < nowTs;
+      const isHigh   = e.impact === 'High';
       const timeClass = isPast ? 'cal-time past' : isHigh ? 'cal-time alert' : 'cal-time';
-      const barClass = isHigh ? 'cal-bar cb-h' : 'cal-bar cb-m';
+      const barClass  = isHigh ? 'cal-bar cb-h' : 'cal-bar cb-m';
 
       let vals = '';
       if (e.forecast) vals += `<span>Prognoza: ${e.forecast}</span>`;
@@ -1276,7 +1327,7 @@ async function loadCalendar() {
         const aNum = parseFloat(e.actual);
         const beat = !isNaN(fNum) && !isNaN(aNum) && aNum > fNum;
         const miss = !isNaN(fNum) && !isNaN(aNum) && aNum < fNum;
-        const cls = beat ? 'cv-actual cv-beat' : miss ? 'cv-actual cv-miss' : 'cv-actual';
+        const cls  = beat ? 'cv-actual cv-beat' : miss ? 'cv-actual cv-miss' : 'cv-actual';
         vals += `<span class="${cls}">${beat?'✓':miss?'✗':''} Actual: ${e.actual}</span>`;
       } else {
         vals += `<span style="color:var(--t3)">Oczekuje...</span>`;
@@ -1293,7 +1344,7 @@ async function loadCalendar() {
       </div>`;
     }).join('');
 
-    // Rebuild ALERTS from high-impact events + base alerts
+    // Rebuild ALERTS from high-impact events
     const calAlerts = relevant.filter(e => e.impact === 'High').map(e => {
       const d = new Date(e.date);
       return {
@@ -1308,8 +1359,26 @@ async function loadCalendar() {
 
   } catch(err) {
     badge.textContent = 'Offline';
-    badge.className = 'badge b-warn';
-    container.innerHTML = `<div style="color:var(--t3);font-size:12px;padding:8px 0">Błąd ładowania kalendarza: ${err.message}</div>`;
+    badge.className   = 'badge b-off';
+
+    let msg, detail;
+    if (err.name === 'AbortError' || err.message === 'Failed to fetch' || err.name === 'TypeError') {
+      msg    = 'Brak połączenia z internetem';
+      detail = 'Sprawdź połączenie i odśwież stronę.';
+    } else if (err.message.startsWith('HTTP')) {
+      msg    = 'Kalendarz chwilowo niedostępny';
+      detail = 'Serwis danych jest offline. Spróbuj za kilka minut.';
+    } else {
+      msg    = 'Nie można pobrać kalendarza';
+      detail = 'Spróbuj odświeżyć stronę.';
+    }
+
+    container.innerHTML = `
+      <div style="text-align:center;padding:20px 0;color:var(--t3)">
+        <div style="font-size:20px;margin-bottom:8px">📡</div>
+        <div style="font-size:12px;font-weight:600;color:var(--t2)">${msg}</div>
+        <div style="font-size:11px;margin-top:4px">${detail}</div>
+      </div>`;
   }
 }
 
