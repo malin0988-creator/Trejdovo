@@ -782,6 +782,55 @@ body::before {
 @media (min-width:768px) {
   .shell { border-left:1px solid var(--border); border-right:1px solid var(--border); }
 }
+
+/* ─── SCANNER ─── */
+.scanner-upload {
+  border: 2px dashed var(--b3);
+  border-radius: 12px;
+  padding: 28px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+.scanner-upload:hover, .scanner-upload.drag-over {
+  border-color: var(--cyan);
+  background: rgba(0,200,232,0.04);
+}
+.scanner-upload input[type=file] {
+  position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+}
+.scanner-upload-ico { font-size: 32px; margin-bottom: 8px; }
+.scanner-upload-lbl {
+  font-family: var(--mono); font-size: 12px; font-weight: 600;
+  color: var(--t2); margin-bottom: 4px;
+}
+.scanner-upload-sub { font-size: 10px; color: var(--t3); }
+.scanner-upload img { max-height: 80px; border-radius: 6px; margin-top: 8px; opacity: 0.8; }
+.scanner-verdict {
+  text-align: center; padding: 22px 16px;
+  border-radius: 12px; margin-bottom: 10px;
+}
+.sv-go   { background: linear-gradient(135deg,rgba(0,217,126,0.1),rgba(0,217,126,0.05));  border: 2px solid var(--green); }
+.sv-wait { background: linear-gradient(135deg,rgba(255,170,0,0.1),rgba(255,170,0,0.05));   border: 2px solid var(--amber); }
+.sv-skip { background: linear-gradient(135deg,rgba(255,61,85,0.1),rgba(255,61,85,0.05));   border: 2px solid var(--red);   }
+.sv-label { font-family:var(--mono); font-size:9px; font-weight:700; letter-spacing:2px; color:var(--t3); text-transform:uppercase; margin-bottom:6px; }
+.sv-verdict { font-family:var(--mono); font-size:30px; font-weight:700; letter-spacing:4px; }
+.sv-go   .sv-verdict { color:var(--green); }
+.sv-wait .sv-verdict { color:var(--amber); }
+.sv-skip .sv-verdict { color:var(--red);   }
+.sltp-row { display:flex; gap:8px; margin-bottom:10px; }
+.sltp-box {
+  flex:1; background:var(--card); border:1px solid var(--border);
+  border-radius:10px; padding:12px 8px; text-align:center;
+}
+.sltp-lbl { font-size:9px; font-family:var(--mono); font-weight:700; letter-spacing:1px; color:var(--t3); margin-bottom:4px; }
+.sltp-val { font-family:var(--mono); font-size:14px; font-weight:700; line-height:1.3; }
+.sl-val { color:var(--red); }
+.tp-val { color:var(--green); }
+.rr-val { color:var(--cyan); }
 </style>
 </head>
 <body>
@@ -818,6 +867,7 @@ body::before {
 <!-- NAV -->
 <nav class="nav">
   <button class="nb on"  onclick="switchTo('dashboard')">Dashboard</button>
+  <button class="nb"     onclick="switchTo('scanner')">Scanner</button>
   <button class="nb"     onclick="switchTo('sentinel')">Sentinel</button>
   <button class="nb"     onclick="switchTo('raporty')">Raporty</button>
   <button class="nb"     onclick="switchTo('newsy')">Newsy</button>
@@ -871,6 +921,47 @@ body::before {
     <div class="stat-box"><div class="sb-label">P&L netto</div><div class="sb-val" id="ds-pnl">—</div><div class="sb-sub">Tygodniowy</div></div>
     <div class="stat-box"><div class="sb-label">Najlepszy</div><div class="sb-val" id="ds-best-val">—</div><div class="sb-sub" id="ds-best-sub">—</div></div>
     <div class="stat-box"><div class="sb-label">Najgorszy</div><div class="sb-val" id="ds-worst-val">—</div><div class="sb-sub" id="ds-worst-sub">—</div></div>
+  </div>
+
+</section>
+
+<!-- ══════════ SCANNER ══════════ -->
+<section class="sec" id="sec-scanner">
+
+  <div class="scanner-upload" id="scanner-upload-zone"
+       ondragover="scannerDragOver(event)" ondragleave="scannerDragLeave(event)" ondrop="scannerDrop(event)">
+    <input type="file" accept="image/*" id="scanner-file-input" onchange="scannerFileChange(this)">
+    <div class="scanner-upload-ico" id="scanner-upload-ico">📊</div>
+    <div class="scanner-upload-lbl" id="scanner-upload-lbl">Wgraj screenshot z TradingView</div>
+    <div class="scanner-upload-sub" id="scanner-upload-sub">PNG, JPG — przeciągnij lub kliknij</div>
+  </div>
+
+  <div class="card" style="margin-bottom:10px">
+    <div class="form-grp" style="margin-bottom:10px">
+      <label class="form-lbl">Instrument</label>
+      <select class="f-input" id="scanner-inst-sel"></select>
+    </div>
+    <div class="form-grp">
+      <label class="form-lbl">Notatka (opcjonalnie)</label>
+      <input class="f-input" type="text" id="scanner-note" placeholder="np. szukam breakoutu, widzę LH/LL, momentum…">
+    </div>
+  </div>
+
+  <button class="btn-primary" onclick="runScannerAnalysis()" id="scanner-btn" style="margin-bottom:10px">
+    🔍 ANALIZUJ SETUP
+  </button>
+
+  <div id="scanner-loading" style="display:none">
+    <div class="ai-gen"><div class="ai-spinner"></div>Scanner analizuje wykres + kontekst fundamentalny…</div>
+  </div>
+
+  <div id="scanner-result"></div>
+
+  <div class="card" style="margin-top:4px">
+    <div style="font-size:11px;color:var(--t3);line-height:1.7">
+      <p style="margin-bottom:6px;padding-left:10px;border-left:2px solid var(--cyan)"><strong style="color:var(--t2)">Jak działa Scanner:</strong> Wgraj screenshot z TV → AI analizuje wykres wzrokowo i zestawia go z Twoją strategią, aktualnym sentymentem Sentinel i nadchodzącymi wydarzeniami makro z Kalendarza.</p>
+      <p style="padding-left:10px;border-left:2px solid var(--purple)"><strong style="color:var(--t2)">Wskazówka:</strong> Uruchom najpierw Sentinel żeby Scanner miał aktualny kontekst fundamentalny dla wybranego instrumentu.</p>
+    </div>
   </div>
 
 </section>
@@ -1041,6 +1132,17 @@ body::before {
       <input class="f-input" type="password" id="api-key-config" placeholder="sk-ant-...">
     </div>
     <button class="btn-primary" onclick="saveApiKey()">ZAPISZ KLUCZ</button>
+  </div>
+
+  <div class="card" style="margin-bottom:10px">
+    <div class="card-hdr" style="margin-bottom:8px"><span class="card-label">🎯 Moja strategia tradingowa</span></div>
+    <div style="font-size:11px;color:var(--t3);margin-bottom:10px;line-height:1.6">Scanner AI używa tej opisu do oceny czy setup na wykresie pasuje do Twojego podejścia.</div>
+    <div class="form-grp">
+      <textarea class="f-input" id="strategy-input" rows="5"
+        placeholder="np. Gram wyłącznie breakouty na H1/H4. Wchodzę na retestach po złamaniu struktury. Stop za ostatni swing high/low. Cel minimum 1:2 R:R. Unikam tradowania w ciągu 15 min przed i po danych makro. Preferuję London session 07:00–12:00 UK…"
+        style="resize:vertical;min-height:90px;line-height:1.6"></textarea>
+    </div>
+    <button class="btn-primary" style="margin-top:4px" onclick="saveStrategy()">ZAPISZ STRATEGIĘ</button>
   </div>
 
   <div class="card">
@@ -1501,10 +1603,11 @@ function switchTo(id) {
   document.querySelectorAll('.nb').forEach(b => b.classList.remove('on'));
   document.getElementById('sec-'+id).classList.add('on');
   const btns = document.querySelectorAll('.nb');
-  const map = ['dashboard','sentinel','raporty','newsy','kalendarz','journal','watchlist','ustawienia'];
+  const map = ['dashboard','scanner','sentinel','raporty','newsy','kalendarz','journal','watchlist','ustawienia'];
   btns[map.indexOf(id)]?.classList.add('on');
   document.getElementById('fab').classList.toggle('hidden', id !== 'journal' && id !== 'dashboard');
   if (id === 'dashboard') renderDashboardInstruments();
+  if (id === 'scanner') scannerRefreshInstruments();
   if (id === 'newsy' && Date.now() - lastNewsLoad > 300000) loadNews();
 }
 
@@ -1595,6 +1698,8 @@ async function callClaude(systemPrompt, userMsg, maxTokens = 1200) {
 }
 
 // ─── SENTINEL ───
+let lastSentinelResult = null;
+
 function buildSentinelSystem() {
   const items = getWatchlist();
   const instList = items.map(x => `${x.sym} (${x.name})`).join(', ');
@@ -1632,6 +1737,7 @@ async function runSentinel() {
     const raw = await callClaude(buildSentinelSystem(), buildTodayContext(), 1200);
     const clean = raw.replace(/```json|```/g, '').trim();
     const data = JSON.parse(clean);
+    lastSentinelResult = data;
     renderSentinel(data);
     updateDashboardSentiment(data);
     // update timestamp
@@ -2355,13 +2461,249 @@ function removeInstrument(idx) {
   startWlRefresh();
 }
 
+// ─── SCANNER ───
+let scannerImageData = null;
+
+function scannerRefreshInstruments() {
+  const sel = document.getElementById('scanner-inst-sel');
+  if (!sel) return;
+  const items = getWatchlist();
+  sel.innerHTML = '<option value="">— wybierz instrument —</option>' +
+    items.map(x => `<option value="${x.sym}">${x.sym} — ${x.name}</option>`).join('') +
+    '<option value="OTHER">Inne</option>';
+}
+
+function scannerFileChange(input) {
+  if (!input.files[0]) return;
+  const file = input.files[0];
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    scannerImageData = {b64: e.target.result.split(',')[1], mtype: file.type};
+    const ico = document.getElementById('scanner-upload-ico');
+    const lbl = document.getElementById('scanner-upload-lbl');
+    const sub = document.getElementById('scanner-upload-sub');
+    const zone = document.getElementById('scanner-upload-zone');
+    if (ico) ico.textContent = '✓';
+    if (lbl) { lbl.textContent = file.name; lbl.style.color = 'var(--green)'; }
+    if (sub) sub.textContent = 'Kliknij aby zmienić';
+    if (zone) {
+      const existing = zone.querySelector('img');
+      if (existing) existing.remove();
+      const img = document.createElement('img');
+      img.src = e.target.result;
+      zone.appendChild(img);
+    }
+  };
+  reader.readAsDataURL(file);
+}
+
+function scannerDragOver(e) {
+  e.preventDefault();
+  document.getElementById('scanner-upload-zone')?.classList.add('drag-over');
+}
+function scannerDragLeave() {
+  document.getElementById('scanner-upload-zone')?.classList.remove('drag-over');
+}
+function scannerDrop(e) {
+  e.preventDefault();
+  document.getElementById('scanner-upload-zone')?.classList.remove('drag-over');
+  const file = e.dataTransfer?.files[0];
+  if (!file || !file.type.startsWith('image/')) return;
+  try {
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    const input = document.getElementById('scanner-file-input');
+    input.files = dt.files;
+    scannerFileChange(input);
+  } catch(e) {}
+}
+
+function buildScannerSystem(sym, strategy, sentinelCtx, calCtx) {
+  const instStr = sym && sym !== 'OTHER' ? ` na instrument: ${sym}` : '';
+  const stratStr = strategy ? `\n\nStrategia tradera:\n${strategy}` : '';
+  const sentStr  = sentinelCtx ? `\n\nAktualny sentyment Sentinel:\n${sentinelCtx}` : '';
+  const calStr   = calCtx ? `\n\nNadchodzące wydarzenia makro (dziś):\n${calCtx}` : '';
+  return `Jesteś Scanner — AI agent analizy setupów tradingowych${instStr}.
+Analizujesz screenshot wykresu z TradingView wzrokowo i konfrontujesz go z kontekstem fundamentalnym i strategią tradera.${stratStr}${sentStr}${calStr}
+
+Odpowiadaj TYLKO w formacie JSON, bez tekstu przed ani po:
+{
+  "verdict": "WCHODZĘ" | "CZEKAM" | "OMIJAM",
+  "verdict_reason": "1 zdanie — główny powód decyzji, po polsku",
+  "technicals": "co widzisz na wykresie: trend, formacje, poziomy wsparcia/oporu, wskaźniki — max 3 zdania po polsku",
+  "fundamentals": "czy aktualne fundamenty wspierają lub blokują ten setup — max 2 zdania po polsku",
+  "sl": "sugerowany Stop Loss — poziom lub opis (np. 'pod ostatni swing low ~18240')",
+  "tp": "sugerowany Take Profit — poziomy (np. 'TP1: 18450, TP2: 18620')",
+  "rr": "szacunkowe R:R np. '1:2.5'",
+  "news_warning": null
+}
+Pole news_warning: jeśli w kalendarzu jest wydarzenie które może zniszczyć ten trade dziś — opisz je (co, kiedy). W przeciwnym razie null.`;
+}
+
+async function runScannerAnalysis() {
+  if (!scannerImageData) { alert('Najpierw wgraj screenshot wykresu z TradingView.'); return; }
+  if (!ANTHROPIC_API_KEY) { alert('Skonfiguruj klucz API w zakładce Config.'); return; }
+
+  const btn    = document.getElementById('scanner-btn');
+  const load   = document.getElementById('scanner-loading');
+  const result = document.getElementById('scanner-result');
+  const sym    = document.getElementById('scanner-inst-sel')?.value || '';
+  const note   = document.getElementById('scanner-note')?.value || '';
+  const strategy = localStorage.getItem('tj_strategy') || '';
+
+  let sentinelCtx = null;
+  if (lastSentinelResult) {
+    const overall = lastSentinelResult.overall
+      ? `Ogólny rynek: ${lastSentinelResult.overall} — ${lastSentinelResult.overall_reason || ''}`
+      : null;
+    let instLine = null;
+    if (sym && sym !== 'OTHER' && lastSentinelResult.instruments?.[sym]) {
+      const d = lastSentinelResult.instruments[sym];
+      instLine = `${sym}: ${d.sentiment || '?'} (score: ${d.score ?? '?'}), signal: ${d.signal || '?'}. ${d.reason || ''}${d.zapalnik && d.zapalnik !== 'null' ? ' ZAPALNIK: ' + d.zapalnik : ''}`;
+    }
+    sentinelCtx = [overall, instLine].filter(Boolean).join('\n') || null;
+  }
+
+  let calCtx = null;
+  if (typeof calendarData !== 'undefined' && calendarData.length) {
+    calCtx = calendarData.slice(0, 6).map(e =>
+      `${e.time || '?'} — ${e.title} (${e.impact || ''}, ${e.country || ''})`
+    ).join('\n');
+  }
+
+  const userMsg = note
+    ? `Przeanalizuj ten screenshot wykresu TradingView. Notatka tradera: "${note}"`
+    : 'Przeanalizuj ten screenshot wykresu TradingView.';
+
+  btn.disabled = true; btn.textContent = 'Analizuję…';
+  load.style.display = 'block'; result.innerHTML = '';
+
+  try {
+    const resp = await fetch('https://trejdovo-api.malin0988.workers.dev', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        apiKey: ANTHROPIC_API_KEY,
+        model: 'claude-sonnet-4-5',
+        max_tokens: 900,
+        system: buildScannerSystem(sym, strategy, sentinelCtx, calCtx),
+        messages: [{
+          role: 'user',
+          content: [
+            {type: 'image', source: {type: 'base64', media_type: scannerImageData.mtype, data: scannerImageData.b64}},
+            {type: 'text', text: userMsg}
+          ]
+        }]
+      })
+    });
+    const data = await resp.json();
+    let text;
+    if (Array.isArray(data?.content))        text = data.content.map(b => b.text || '').join('');
+    else if (typeof data?.content === 'string') text = data.content;
+    else if (typeof data?.text    === 'string') text = data.text;
+    else if (typeof data?.result  === 'string') text = data.result;
+    else if (typeof data?.response === 'string') text = data.response;
+    if (!text) throw new Error('Nieznany format odpowiedzi proxy');
+    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+    renderScannerResult(parsed, sym);
+  } catch(err) {
+    result.innerHTML = `<div class="card" style="border-color:rgba(255,61,85,0.3)"><div style="color:var(--red);font-size:12px;padding:4px 0">Błąd: ${err.message}</div></div>`;
+  }
+
+  btn.disabled = false; btn.textContent = '🔍 ANALIZUJ SETUP';
+  load.style.display = 'none';
+}
+
+function renderScannerResult(d, sym) {
+  const result = document.getElementById('scanner-result');
+  const vc = d.verdict === 'WCHODZĘ' ? 'sv-go' : d.verdict === 'CZEKAM' ? 'sv-wait' : 'sv-skip';
+  const vi = d.verdict === 'WCHODZĘ' ? '✅' : d.verdict === 'CZEKAM' ? '⏳' : '🚫';
+  const wlMap = {}; getWatchlist().forEach(x => wlMap[x.sym] = x.color);
+  const symColor = (sym && wlMap[sym]) ? wlMap[sym] : 'var(--cyan)';
+
+  const sentBadge = (lastSentinelResult && sym && sym !== 'OTHER' && lastSentinelResult.instruments?.[sym]) ? (() => {
+    const sd = lastSentinelResult.instruments[sym];
+    const bc = sd.sentiment === 'BULLISH' ? 'b-bull' : sd.sentiment === 'BEARISH' ? 'b-bear' : 'b-neut';
+    return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;padding:8px 12px;background:var(--bg3);border-radius:8px;border:1px solid var(--border)">
+      <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:${symColor}">${sym}</span>
+      <span class="badge ${bc}">${sd.sentiment}</span>
+      <span style="font-family:var(--mono);font-size:9px;color:var(--t3)">${sd.signal || ''}</span>
+      <span style="font-size:9px;color:var(--t3);flex:1;text-align:right;font-family:var(--mono)">SENTINEL</span>
+    </div>`;
+  })() : '';
+
+  const newsHtml = d.news_warning ? `
+    <div class="sentinel-alert warn" style="margin-bottom:10px">
+      <div class="sent-hdr">
+        <span class="sent-ico">⚠️</span>
+        <span class="sent-title" style="color:var(--amber)">NADCHODZĄCE WYDARZENIE MAKRO</span>
+      </div>
+      <div style="font-size:12px;color:var(--t2);margin-top:6px;line-height:1.6">${d.news_warning}</div>
+    </div>` : '';
+
+  result.innerHTML = `
+    <div class="scanner-verdict ${vc}">
+      <div class="sv-label">Wyrok Scannera</div>
+      <div class="sv-verdict">${vi} ${d.verdict}</div>
+      ${d.verdict_reason ? `<div style="font-size:12px;color:var(--t2);margin-top:8px;line-height:1.5">${d.verdict_reason}</div>` : ''}
+    </div>
+
+    <div class="sltp-row">
+      <div class="sltp-box">
+        <div class="sltp-lbl">STOP LOSS</div>
+        <div class="sltp-val sl-val">${d.sl || '—'}</div>
+      </div>
+      <div class="sltp-box">
+        <div class="sltp-lbl">TAKE PROFIT</div>
+        <div class="sltp-val tp-val">${d.tp || '—'}</div>
+      </div>
+      <div class="sltp-box">
+        <div class="sltp-lbl">R : R</div>
+        <div class="sltp-val rr-val">${d.rr || '—'}</div>
+      </div>
+    </div>
+
+    ${sentBadge}
+    ${newsHtml}
+
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-hdr" style="margin-bottom:8px">
+        <span class="card-label">Analiza techniczna</span>
+        <span class="badge b-off">TV Chart</span>
+      </div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.7">${d.technicals || '—'}</div>
+    </div>
+
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-hdr" style="margin-bottom:8px">
+        <span class="card-label">Kontekst fundamentalny</span>
+        <span class="badge b-off">Sentinel</span>
+      </div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.7">${d.fundamentals || '—'}</div>
+    </div>
+  `;
+}
+
+function saveStrategy() {
+  const val = (document.getElementById('strategy-input')?.value || '').trim();
+  localStorage.setItem('tj_strategy', val);
+  const btn = document.querySelector('[onclick="saveStrategy()"]');
+  if (btn) { btn.textContent = '✓ ZAPISANO'; setTimeout(() => btn.textContent = 'ZAPISZ STRATEGIĘ', 1500); }
+}
+
 // ─── INIT ───
 loadJournalTrades();
 loadCalendar();
 loadNews();
 renderWatchlist();
 renderDashboardInstruments();
+scannerRefreshInstruments();
 startWlRefresh();
+try {
+  const strat = localStorage.getItem('tj_strategy');
+  const stratEl = document.getElementById('strategy-input');
+  if (strat && stratEl) stratEl.value = strat;
+} catch(e) {}
 </script>
 </body>
 </html>
