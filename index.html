@@ -1519,8 +1519,20 @@ async function callClaude(systemPrompt, userMsg, maxTokens = 1200) {
     throw new Error(err.error?.message || `API error ${resp.status}`);
   }
   const data = await resp.json();
-  const content = Array.isArray(data?.content) ? data.content : [];
-  return content.map(b => b.text || '').join('');
+  let text;
+  if (Array.isArray(data?.content)) {
+    text = data.content.map(b => b.text || '').join('');
+  } else if (typeof data?.content === 'string') {
+    text = data.content;
+  } else if (typeof data?.text === 'string') {
+    text = data.text;
+  } else if (typeof data?.result === 'string') {
+    text = data.result;
+  } else if (typeof data?.response === 'string') {
+    text = data.response;
+  }
+  if (!text) throw new Error('Błąd proxy: pusta lub nieznana odpowiedź (' + JSON.stringify(data).slice(0, 120) + ')');
+  return text;
 }
 
 // ─── SENTINEL ───
