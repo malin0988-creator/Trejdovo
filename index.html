@@ -1231,6 +1231,58 @@ let ALERTS = [
 // ─── LIVE MACRO CALENDAR (Forex Factory) ───
 let calendarData = [];
 
+// Returns true when a macro event likely affects the given watchlist symbol.
+function isEventRelevantTo(sym, title, country) {
+  const t = title.toLowerCase();
+  const c = (country || '').toUpperCase();
+  const usData = c === 'USD' && /nfp|non.farm|payroll|jobless|unemployment|gdp|cpi|pce|inflation|fomc|fed |interest rate|retail sales|pmi|ism|consumer|housing|durable/.test(t);
+
+  if (['NQ','ES','YM','RTY','SPY','QQQ'].includes(sym))
+    return usData;
+
+  if (['CL','USOIL'].includes(sym))
+    return /oil|crude|eia|opec|petroleum|inventory|barrel/.test(t) || usData;
+
+  if (sym === 'NG')
+    return /natural gas|eia gas|gas storage/.test(t);
+
+  if (['GOLD','GC','XAU','XAUUSD','SI'].includes(sym))
+    return /gold|silver|metal|bullion/.test(t) ||
+           (c === 'USD' && /cpi|inflation|fomc|fed |interest rate|pce/.test(t));
+
+  if (['BTC','ETH','SOL','XRP','DOGE','ADA','BNB','LTC','LINK','AVAX','MATIC'].includes(sym))
+    return /bitcoin|ethereum|crypto|digital asset|sec.*etf|etf.*sec|blockchain/.test(t) ||
+           (c === 'USD' && /cpi|fomc|fed |interest rate|inflation/.test(t));
+
+  if (/^EUR|EURUSD/.test(sym))
+    return c === 'EUR' || /ecb|euro.?zone|european central/.test(t);
+
+  if (/^GBP|GBPUSD/.test(sym))
+    return c === 'GBP' || /boe|bank of england|uk.*(rate|gdp|cpi|inflation)/.test(t);
+
+  if (/JPY/.test(sym))
+    return c === 'JPY' || /boj|bank of japan|japan.*(rate|gdp|cpi)|yen/.test(t);
+
+  if (/CAD/.test(sym))
+    return c === 'CAD' || /bank of canada|boc|canada.*(rate|gdp|cpi)/.test(t);
+
+  if (/AUD/.test(sym))
+    return c === 'AUD' || /rba|reserve bank.*australia|australia.*(rate|gdp|cpi)/.test(t);
+
+  return false;
+}
+
+function renderImpactTags(event) {
+  const tags = getWatchlist()
+    .filter(item => isEventRelevantTo(item.sym, event.title || '', event.country || ''))
+    .map(item =>
+      `<span style="background:${item.color}22;color:${item.color};font-size:9px;font-weight:700;`+
+      `font-family:var(--mono);padding:1px 6px;border-radius:3px;border:1px solid ${item.color}55;`+
+      `margin-left:5px;vertical-align:middle">${item.sym}</span>`
+    ).join('');
+  return tags;
+}
+
 async function loadCalendar() {
   const container = document.getElementById('calendar-events');
   const badge     = document.getElementById('cal-status-badge');
@@ -1262,7 +1314,7 @@ async function loadCalendar() {
 
       const monEvents = all.filter(e => {
         const eDay = new Date(e.date).toLocaleDateString('en-CA', {timeZone:'Europe/London'});
-        return eDay === nextMonKey && (e.impact === 'High' || e.impact === 'Medium');
+        return eDay === nextMonKey && e.impact !== 'Holiday';
       }).sort((a, b) => new Date(a.date) - new Date(b.date));
 
       let html = `
@@ -1277,11 +1329,14 @@ async function loadCalendar() {
         html += monEvents.map(e => {
           const ukTime = new Date(e.date).toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
           const isHigh = e.impact === 'High';
+          const isMon = e.impact === 'Medium';
+          const barC  = isHigh ? 'cal-bar cb-h' : isMon ? 'cal-bar cb-m' : 'cal-bar cb-l';
+          const tags  = renderImpactTags(e);
           return `<div class="cal-row">
             <span class="cal-time${isHigh ? ' alert' : ''}">${ukTime}${isHigh ? ' ⚠️' : ''}</span>
-            <div class="${isHigh ? 'cal-bar cb-h' : 'cal-bar cb-m'}"></div>
+            <div class="${barC}"></div>
             <div class="cal-info">
-              <div class="cal-name">${e.title} <span style="font-size:10px;color:var(--t3);margin-left:4px">${e.country}</span></div>
+              <div class="cal-name">${e.title}${tags} <span style="font-size:10px;color:var(--t3);margin-left:4px">${e.country}</span></div>
               <div class="cal-vals"><span style="color:var(--t3)">Prognoza: ${e.forecast || '—'}</span>${isHigh ? '<span class="badge b-warn" style="margin-left:4px">HIGH</span>' : ''}</div>
             </div>
           </div>`;
@@ -1297,28 +1352,33 @@ async function loadCalendar() {
 
     // ── WEEKDAY branch ──
     const todayUK = now.toLocaleDateString('en-CA', {timeZone:'Europe/London'});
-    const relevant = all.filter(e => {
+
+    // All non-holiday events for display; High+Medium only for AI context
+    const todayAll = all.filter(e => {
       const eDay = new Date(e.date).toLocaleDateString('en-CA', {timeZone:'Europe/London'});
-      return eDay === todayUK && (e.impact === 'High' || e.impact === 'Medium');
+      return eDay === todayUK && e.impact !== 'Holiday';
     }).sort((a, b) => new Date(a.date) - new Date(b.date));
 
-    calendarData = relevant;
+    calendarData = todayAll.filter(e => e.impact === 'High' || e.impact === 'Medium');
     badge.textContent = 'Live';
     badge.className   = 'badge b-live';
 
-    if (relevant.length === 0) {
-      container.innerHTML = '<div style="color:var(--t3);font-size:12px;padding:8px 0">Brak ważnych wydarzeń makro na dziś.</div>';
+    if (todayAll.length === 0) {
+      container.innerHTML = '<div style="color:var(--t3);font-size:12px;padding:8px 0">Brak wydarzeń makro na dziś.</div>';
       return;
     }
 
     const nowTs = new Date();
-    container.innerHTML = relevant.map(e => {
+    container.innerHTML = todayAll.map(e => {
       const eDate    = new Date(e.date);
       const ukTime   = eDate.toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
       const isPast   = eDate < nowTs;
       const isHigh   = e.impact === 'High';
+      const isMed    = e.impact === 'Medium';
       const timeClass = isPast ? 'cal-time past' : isHigh ? 'cal-time alert' : 'cal-time';
-      const barClass  = isHigh ? 'cal-bar cb-h' : 'cal-bar cb-m';
+      const barClass  = isHigh ? 'cal-bar cb-h' : isMed ? 'cal-bar cb-m' : 'cal-bar cb-l';
+
+      const tags = renderImpactTags(e);
 
       let vals = '';
       if (e.forecast) vals += `<span>Prognoza: ${e.forecast}</span>`;
@@ -1331,14 +1391,14 @@ async function loadCalendar() {
         vals += `<span class="${cls}">${beat?'✓':miss?'✗':''} Actual: ${e.actual}</span>`;
       } else {
         vals += `<span style="color:var(--t3)">Oczekuje...</span>`;
-        if (isHigh) vals += `<span class="badge b-warn">HIGH</span>`;
+        if (isHigh) vals += `<span class="badge b-warn" style="margin-left:4px">HIGH</span>`;
       }
 
       return `<div class="cal-row">
         <span class="${timeClass}">${ukTime}${isHigh && !isPast ? ' ⚠️' : ''}</span>
         <div class="${barClass}"></div>
         <div class="cal-info">
-          <div class="cal-name">${e.title} <span style="font-size:10px;color:var(--t3);margin-left:4px">${e.country}</span></div>
+          <div class="cal-name">${e.title}${tags} <span style="font-size:10px;color:var(--t3);margin-left:4px">${e.country}</span></div>
           <div class="cal-vals">${vals}</div>
         </div>
       </div>`;
