@@ -1009,49 +1009,7 @@ body::before {
 
 <!-- ══════════ RAPORTY ══════════ -->
 <section class="sec" id="sec-raporty">
-
-  <div id="report-gen-area">
-    <div id="report-gen-btn-area">
-      <button class="btn-primary" onclick="generateReport()" id="report-gen-btn" style="margin-bottom:14px">
-        ⚡ GENERUJ RAPORT AI (07:00–14:35)
-      </button>
-    </div>
-    <div id="report-loading" style="display:none">
-      <div class="ai-gen"><div class="ai-spinner"></div>AI generuje raport dla Twoich instrumentów...</div>
-    </div>
-  </div>
-
-  <div id="report-output"></div>
-
-  <!-- Static fallback report -->
-  <div class="report-block" id="static-report">
-    <div class="report-time-hdr">
-      <div><div class="rtl">⚡ Raport Trejdovo AI</div><div class="rts">Brak wygenerowanego raportu</div></div>
-      <div class="badge b-off">BRAK</div>
-    </div>
-    <div style="padding:24px 16px;text-align:center;color:var(--t3)">
-      <div style="font-size:28px;margin-bottom:8px">📊</div>
-      <div style="font-size:13px;font-weight:600;color:var(--t2);margin-bottom:4px">Kliknij "⚡ GENERUJ RAPORT AI" powyżej</div>
-      <div style="font-size:11px">AI przeanalizuje Twoje instrumenty z Watchlisty i wyświetli raport tutaj</div>
-    </div>
-  </div>
-
-  <div class="report-block">
-    <div class="report-time-hdr">
-      <div><div class="rtl">🔔 14:00 — Pre-market USA</div><div class="rts">Generowany automatycznie o 14:00</div></div>
-      <div class="badge b-off">PENDING</div>
-    </div>
-    <div class="report-pending"><div class="pend-time">14:00</div><p>Raport zostanie wygenerowany przez AI 5 minut przed otwarciem NYSE. Będzie zawierał scenariusze IF/THEN dla danych 14:30.</p></div>
-  </div>
-
-  <div class="report-block">
-    <div class="report-time-hdr">
-      <div><div class="rtl">⚡ 14:30 — Reakcja na dane</div><div class="rts">Jobless Claims — generowany po publikacji</div></div>
-      <div class="badge b-off">PENDING</div>
-    </div>
-    <div class="report-pending"><div class="pend-time">14:35</div><p>5 minut po publikacji — AI porównuje actual vs forecast i mówi co dalej dla Twoich instrumentów.</p></div>
-  </div>
-
+  <div id="reports-container"></div>
 </section>
 
 <!-- ══════════ NEWSY ══════════ -->
@@ -1143,6 +1101,29 @@ body::before {
         style="resize:vertical;min-height:90px;line-height:1.6"></textarea>
     </div>
     <button class="btn-primary" style="margin-top:4px" onclick="saveStrategy()">ZAPISZ STRATEGIĘ</button>
+  </div>
+
+  <div class="card" style="margin-bottom:10px">
+    <div class="card-hdr" style="margin-bottom:8px"><span class="card-label">⏰ Czasy raportów AI</span></div>
+    <div style="font-size:11px;color:var(--t3);margin-bottom:10px;line-height:1.6">Raporty generują się automatycznie o tych godzinach UK. Możesz zmienić na dowolne czasy pasujące do Twojej sesji.</div>
+    <div style="display:flex;gap:8px;margin-bottom:8px">
+      <div style="flex:1">
+        <label class="form-lbl">Raport 1</label>
+        <input class="f-input" type="time" id="rpt-t0" value="07:00">
+        <div style="font-size:9px;color:var(--t3);margin-top:3px">Europejski Setup</div>
+      </div>
+      <div style="flex:1">
+        <label class="form-lbl">Raport 2</label>
+        <input class="f-input" type="time" id="rpt-t1" value="14:00">
+        <div style="font-size:9px;color:var(--t3);margin-top:3px">Pre-market USA</div>
+      </div>
+      <div style="flex:1">
+        <label class="form-lbl">Raport 3</label>
+        <input class="f-input" type="time" id="rpt-t2" value="14:30">
+        <div style="font-size:9px;color:var(--t3);margin-top:3px">Reakcja na dane</div>
+      </div>
+    </div>
+    <button class="btn-primary" style="margin-top:4px" onclick="saveReportTimes()">ZAPISZ CZASY</button>
   </div>
 
   <div class="card">
@@ -1326,9 +1307,31 @@ function updateClock() {
 }
 // ─── COUNTDOWN ───
 let ALERTS = [
-  {h:7, m:0, label:'Europejski Setup', sub:'Analiza Azji + narracja dnia'},
-  {h:14, m:0, label:'Pre-market USA', sub:'Scenariusze przed danymi'},
+  {h:7,  m:0,  label:'Europejski Setup',   sub:'Analiza Azji + narracja dnia', slotId:'r0'},
+  {h:14, m:0,  label:'Pre-market USA',      sub:'Scenariusze przed danymi',     slotId:'r1'},
+  {h:14, m:30, label:'Reakcja na dane',     sub:'Po publikacji danych USA',     slotId:'r2'},
 ];
+
+function rebuildAlerts() {
+  const rt = getReportTimes();
+  function p(s) { const [h,m] = s.split(':').map(Number); return {h, m}; }
+  const t0 = p(rt.r0), t1 = p(rt.r1), t2 = p(rt.r2);
+  const base = [
+    {h:t0.h, m:t0.m, label:'Europejski Setup',  sub:'Analiza Azji + narracja dnia', slotId:'r0'},
+    {h:t1.h, m:t1.m, label:'Pre-market USA',     sub:'Scenariusze przed danymi',     slotId:'r1'},
+    {h:t2.h, m:t2.m, label:'Reakcja na dane',    sub:'Po publikacji danych USA',     slotId:'r2'},
+  ];
+  const calAlerts = calendarData.filter(e => e.impact === 'High').map(e => {
+    const d = new Date(e.date);
+    return {
+      h: parseInt(d.toLocaleTimeString('en-GB', {timeZone:'Europe/London', hour:'2-digit', hour12:false})),
+      m: parseInt(d.toLocaleTimeString('en-GB', {timeZone:'Europe/London', minute:'2-digit'})),
+      label: e.title,
+      sub: `${e.country} — Wysoki wpływ`
+    };
+  });
+  ALERTS = [...base, ...calAlerts].sort((a, b) => a.h*60+a.m - (b.h*60+b.m));
+}
 
 // ─── LIVE MACRO CALENDAR (Forex Factory) ───
 let calendarData = [];
@@ -1506,18 +1509,7 @@ async function loadCalendar() {
       </div>`;
     }).join('');
 
-    // Rebuild ALERTS from high-impact events
-    const calAlerts = relevant.filter(e => e.impact === 'High').map(e => {
-      const d = new Date(e.date);
-      return {
-        h: parseInt(d.toLocaleTimeString('en-GB', {timeZone:'Europe/London', hour:'2-digit', hour12:false})),
-        m: parseInt(d.toLocaleTimeString('en-GB', {timeZone:'Europe/London', minute:'2-digit'})),
-        label: e.title,
-        sub: `${e.country} — Wysoki wpływ`
-      };
-    });
-    const base = [{h:7,m:0,label:'Europejski Setup',sub:'Analiza Azji + narracja dnia'},{h:14,m:0,label:'Pre-market USA',sub:'Scenariusze przed danymi'}];
-    ALERTS = [...base, ...calAlerts].sort((a, b) => a.h*60+a.m - (b.h*60+b.m));
+    rebuildAlerts();
 
   } catch(err) {
     badge.textContent = 'Offline';
@@ -1576,17 +1568,24 @@ updateClock();
 
 function updateCountdown(uk) {
   const nowMin = uk.getHours()*60 + uk.getMinutes();
+  const pad = n => String(n).padStart(2,'0');
   let next = null;
   for (const a of ALERTS) {
-    const aMin = a.h*60+a.m;
-    if (aMin > nowMin) { next = a; break; }
+    if (a.h*60+a.m > nowMin) { next = a; break; }
   }
-  if (!next) next = ALERTS[0];
-  const h = String(next.h).padStart(2,'0');
-  const m = String(next.m).padStart(2,'0');
-  document.getElementById('na-time').textContent = `${h}:${m}`;
+  if (!next) {
+    // All today's events passed — show first alert tomorrow
+    const first = ALERTS[0] || {h:7, m:0, label:'Europejski Setup', sub:'Następna sesja'};
+    document.getElementById('na-time').textContent  = `${pad(first.h)}:${pad(first.m)}`;
+    document.getElementById('na-label').textContent = first.label;
+    document.getElementById('na-sub').textContent   = 'Następna sesja — jutro';
+    const minsLeft = (24*60 - nowMin) + (first.h*60 + first.m);
+    document.getElementById('na-countdown').textContent = `jutro za ${Math.floor(minsLeft/60)}h ${minsLeft%60}min`;
+    return;
+  }
+  document.getElementById('na-time').textContent  = `${pad(next.h)}:${pad(next.m)}`;
   document.getElementById('na-label').textContent = next.label;
-  document.getElementById('na-sub').textContent = next.sub;
+  document.getElementById('na-sub').textContent   = next.sub;
   const diff = (next.h*60+next.m) - nowMin;
   if (diff <= 0) {
     document.getElementById('na-countdown').textContent = '🔴 TERAZ';
@@ -1607,7 +1606,8 @@ function switchTo(id) {
   btns[map.indexOf(id)]?.classList.add('on');
   document.getElementById('fab').classList.toggle('hidden', id !== 'journal' && id !== 'dashboard');
   if (id === 'dashboard') renderDashboardInstruments();
-  if (id === 'scanner') scannerRefreshInstruments();
+  if (id === 'scanner')   scannerRefreshInstruments();
+  if (id === 'raporty')   renderReportsSection();
   if (id === 'newsy' && Date.now() - lastNewsLoad > 300000) loadNews();
 }
 
@@ -1738,9 +1738,9 @@ async function runSentinel() {
     const clean = raw.replace(/```json|```/g, '').trim();
     const data = JSON.parse(clean);
     lastSentinelResult = data;
+    localStorage.setItem('tj_sentinel', JSON.stringify({data, ts: Date.now()}));
     renderSentinel(data);
     updateDashboardSentiment(data);
-    // update timestamp
     const now = new Date().toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
     document.getElementById('sent-main-time').textContent = now;
     document.getElementById('sent-updated').textContent = `Ostatnia aktualizacja: ${now}`;
@@ -1831,6 +1831,46 @@ function updateDashboardSentiment(data) {
 }
 
 // ─── REPORT GENERATOR ───
+const RPT_KEY = 'tj_reports';
+
+function getReportTimes() {
+  try {
+    const s = JSON.parse(localStorage.getItem('tj_report_times'));
+    return {r0: s?.r0 || '07:00', r1: s?.r1 || '14:00', r2: s?.r2 || '14:30'};
+  } catch { return {r0:'07:00', r1:'14:00', r2:'14:30'}; }
+}
+
+function saveReportTimes() {
+  const t0 = document.getElementById('rpt-t0')?.value || '07:00';
+  const t1 = document.getElementById('rpt-t1')?.value || '14:00';
+  const t2 = document.getElementById('rpt-t2')?.value || '14:30';
+  localStorage.setItem('tj_report_times', JSON.stringify({r0:t0, r1:t1, r2:t2}));
+  rebuildAlerts();
+  renderReportsSection();
+  const btn = document.querySelector('[onclick="saveReportTimes()"]');
+  if (btn) { btn.textContent = '✓ ZAPISANO'; setTimeout(() => btn.textContent = 'ZAPISZ CZASY', 1500); }
+}
+
+function getTodayUK() {
+  return new Date().toLocaleDateString('en-CA', {timeZone:'Europe/London'});
+}
+
+function getStoredReports() {
+  try {
+    const s = JSON.parse(localStorage.getItem(RPT_KEY));
+    if (!s) return {};
+    if (s.date !== getTodayUK()) { localStorage.removeItem(RPT_KEY); return {}; }
+    return s;
+  } catch { return {}; }
+}
+
+function saveStoredReport(slotId, data) {
+  const s = getStoredReports();
+  s.date = getTodayUK();
+  s[slotId] = {data, ts: Date.now()};
+  localStorage.setItem(RPT_KEY, JSON.stringify(s));
+}
+
 function buildReportSystem() {
   const items = getWatchlist();
   const instList = items.map(x => x.sym).join(', ');
@@ -1849,46 +1889,19 @@ ${tableJson}
 }`;
 }
 
-async function generateReport() {
-  const btn = document.getElementById('report-gen-btn');
-  const loading = document.getElementById('report-loading');
-  const output = document.getElementById('report-output');
-  const staticR = document.getElementById('static-report');
-
-  btn.disabled = true; btn.textContent = 'Generuję...';
-  loading.style.display = 'block';
-
-  try {
-    const raw = await callClaude(buildReportSystem(), buildTodayContext() + '\n\nWygeneruj raport zbiorczy 07:00–14:35 UK.', 1000);
-    const clean = raw.replace(/```json|```/g,'').trim();
-    const data = JSON.parse(clean);
-    renderReport(data, output);
-    staticR.style.display = 'none';
-  } catch(e) {
-    output.innerHTML = `<div class="card" style="border-color:rgba(255,61,85,0.3);margin-bottom:12px"><div style="color:var(--red);font-size:12px">${e.message}</div></div>`;
-  }
-
-  btn.disabled = false; btn.textContent = '⚡ GENERUJ RAPORT AI (07:00–14:35)';
-  loading.style.display = 'none';
-}
-
-function renderReport(data, container) {
+function buildReportHtml(data, label, timeStr) {
   const badgeClass = b => b==='BULLISH'?'b-bull':b==='BEARISH'?'b-bear':b==='NEUTRAL'?'b-neut':'b-warn';
   const wlColors = {}; getWatchlist().forEach(x => wlColors[x.sym] = x.color);
   const dotColor = inst => wlColors[inst] || 'var(--t2)';
-  const now = new Date().toLocaleString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit', day:'numeric', month:'long', year:'numeric'});
-
-  let rows = (data.tabela || []).map(r => `
+  const rows = (data.tabela || []).map(r => `
     <tr>
       <td><div class="rt-inst"><div class="rt-dot" style="background:${dotColor(r.instrument)}"></div>${r.instrument}</div></td>
       <td><span class="badge ${badgeClass(r.badge)}" style="margin-bottom:4px;display:inline-block">${r.badge}</span><br>${r.status}</td>
       <td>${r.tv_action}</td>
     </tr>`).join('');
-
-  container.innerHTML = `
-  <div class="report-block">
+  return `
     <div class="report-time-hdr">
-      <div><div class="rtl">⚡ Raport Trejdovo AI</div><div class="rts">${now}</div></div>
+      <div><div class="rtl">⚡ ${label}</div><div class="rts">Wygenerowano: ${timeStr}</div></div>
       <div class="badge b-live">AI</div>
     </div>
     <div class="report-narrative">${data.narracja}</div>
@@ -1900,8 +1913,101 @@ function renderReport(data, container) {
     <div style="padding:12px 16px;border-top:1px solid var(--border);background:rgba(139,124,248,0.04)">
       <div style="font-family:var(--mono);font-size:9px;font-weight:700;color:var(--purple);letter-spacing:1px;margin-bottom:5px">🤖 ALERT DLA CLAUDE CODE / MT5</div>
       <div style="font-size:11px;color:var(--t2)">${data.alert_claude_code}</div>
-    </div>` : ''}
-  </div>`;
+    </div>` : ''}`;
+}
+
+const REPORT_SLOTS = [
+  {id:'r0', label:'Europejski Setup',  desc:'Narracja dnia, analiza Azji, plan sesji europejskiej',   ctx:'Wygeneruj raport poranny (European Setup). Analiza nocnych ruchów Azji, narracja dnia, plan sesji 07:00–12:00 UK.'},
+  {id:'r1', label:'Pre-market USA',    desc:'Scenariusze IF/THEN przed otwarciem NYSE',                ctx:'Wygeneruj raport pre-market USA. Scenariusze IF/THEN dla nadchodzących danych, kluczowe poziomy na otwarcie NYSE.'},
+  {id:'r2', label:'Reakcja na dane',   desc:'Actual vs Forecast, kierunek kapitału po danych USA',    ctx:'Wygeneruj raport post-data. Oceń actual vs forecast z kalendarza makro, kierunek przepływu kapitału, co robić przez kolejne 2-4h.'},
+];
+
+function renderReportsSection() {
+  const container = document.getElementById('reports-container');
+  if (!container) return;
+  const times   = getReportTimes();
+  const stored  = getStoredReports();
+  const uk      = new Date(new Date().toLocaleString('en-US', {timeZone:'Europe/London'}));
+  const nowMin  = uk.getHours()*60 + uk.getMinutes();
+  let html = '';
+
+  for (const slot of REPORT_SLOTS) {
+    const slotTime = times[slot.id] || '07:00';
+    const [sh, sm] = slotTime.split(':').map(Number);
+    const slotMin  = sh*60 + sm;
+    const isPast   = nowMin >= slotMin;
+    const sr       = stored[slot.id];
+
+    if (sr) {
+      const ts      = new Date(sr.ts);
+      const timeStr = ts.toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
+      html += `
+        <div class="report-block" id="rpt-block-${slot.id}">
+          ${buildReportHtml(sr.data, slot.label, timeStr)}
+          <div style="padding:8px 16px 12px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px">
+            <button class="btn-primary" style="width:auto;padding:6px 14px;font-size:10px;margin:0;background:var(--bg3);border:1px solid var(--b3);color:var(--t2)" onclick="generateReport('${slot.id}')">↻ Regeneruj</button>
+            <div id="rpt-loading-${slot.id}" style="display:none;font-size:11px;color:var(--t3)">Generuję...</div>
+          </div>
+        </div>`;
+    } else if (isPast) {
+      html += `
+        <div class="report-block" id="rpt-block-${slot.id}">
+          <div class="report-time-hdr">
+            <div><div class="rtl">⚡ ${slotTime} — ${slot.label}</div><div class="rts">${slot.desc}</div></div>
+            <div class="badge b-warn">GOTOWY</div>
+          </div>
+          <div style="padding:20px 16px;text-align:center">
+            <div style="font-size:24px;margin-bottom:8px">📊</div>
+            <div style="font-size:12px;color:var(--t2);margin-bottom:12px">Czas raportu minął — możesz wygenerować teraz</div>
+            <button class="btn-primary" style="width:auto;padding:8px 20px;margin:0" onclick="generateReport('${slot.id}')">⚡ GENERUJ ${slotTime}</button>
+            <div id="rpt-loading-${slot.id}" style="display:none;margin-top:10px"><div class="ai-gen"><div class="ai-spinner"></div>AI generuje raport…</div></div>
+          </div>
+        </div>`;
+    } else {
+      const diffMin   = slotMin - nowMin;
+      const countdown = diffMin < 60 ? `za ${diffMin} min` : `za ${Math.floor(diffMin/60)}h ${diffMin%60}min`;
+      html += `
+        <div class="report-block" id="rpt-block-${slot.id}">
+          <div class="report-time-hdr">
+            <div><div class="rtl">⏳ ${slotTime} — ${slot.label}</div><div class="rts">${slot.desc}</div></div>
+            <div class="badge b-off">PENDING</div>
+          </div>
+          <div class="report-pending">
+            <div class="pend-time">${slotTime}</div>
+            <p>Raport wygeneruje się automatycznie o ${slotTime} UK (${countdown}).</p>
+          </div>
+        </div>`;
+    }
+  }
+  container.innerHTML = html;
+}
+
+async function generateReport(slotId) {
+  const slot = REPORT_SLOTS.find(s => s.id === slotId);
+  if (!slot) return;
+  const times    = getReportTimes();
+  const slotTime = times[slotId] || '?';
+  const loadEl   = document.getElementById('rpt-loading-' + slotId);
+  const blockEl  = document.getElementById('rpt-block-'   + slotId);
+  const btn      = blockEl?.querySelector('button[onclick^="generateReport"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Generuję…'; }
+  if (loadEl) loadEl.style.display = 'block';
+  try {
+    const raw   = await callClaude(buildReportSystem(), buildTodayContext() + '\n\n' + slot.ctx, 1000);
+    const clean = raw.replace(/```json|```/g,'').trim();
+    const data  = JSON.parse(clean);
+    saveStoredReport(slotId, data);
+    renderReportsSection();
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = '⚡ GENERUJ ' + slotTime; }
+    if (loadEl) loadEl.style.display = 'none';
+    if (blockEl) {
+      const errDiv = document.createElement('div');
+      errDiv.style.cssText = 'color:var(--red);font-size:12px;padding:8px 16px';
+      errDiv.textContent = 'Błąd: ' + e.message;
+      blockEl.appendChild(errDiv);
+    }
+  }
 }
 
 // ─── NEWS ANALYSIS ───
@@ -2216,24 +2322,33 @@ async function requestPush() {
 function checkScheduledAlerts() {
   const uk = new Date(new Date().toLocaleString('en-US', {timeZone:'Europe/London'}));
   const h = uk.getHours(), m = uk.getMinutes(), s = uk.getSeconds();
-  if (s > 5) return; // only fire in first 5 seconds of each minute
+  if (s > 5) return;
 
-  const alerts = [
-    {h:7, m:0, title:'Trejdovo 07:00', body:'Europejski Setup gotowy — sprawdź zakładkę Raporty'},
-    {h:14, m:0, title:'Trejdovo 14:00', body:'Pre-market USA — 30 min do danych z NYSE'},
-    {h:14, m:25, title:'⚠️ Trejdovo 14:30', body:'Za 5 minut: US Jobless Claims — wysoki wpływ na Twoje instrumenty'},
-    {h:15, m:25, title:'⚠️ Trejdovo 15:30', body:'Za 5 minut: EIA Natural Gas — obserwuj Twoje instrumenty'},
+  // Reset reports at 06:59 each day
+  if (h === 6 && m === 59) { localStorage.removeItem(RPT_KEY); renderReportsSection(); }
+
+  const pushAlerts = [
+    {h:7,  m:0,  title:'Trejdovo 07:00', body:'Europejski Setup — sprawdź zakładkę Raporty'},
+    {h:14, m:0,  title:'Trejdovo 14:00', body:'Pre-market USA — 30 min do otwarcia NYSE'},
+    {h:14, m:25, title:'⚠️ Trejdovo', body:'Za 5 minut: dane USA — wysoki wpływ na Twoje instrumenty'},
+    {h:15, m:25, title:'⚠️ Trejdovo', body:'Za 5 minut: EIA Natural Gas'},
   ];
-
-  const match = alerts.find(a => a.h===h && a.m===m);
+  const match = pushAlerts.find(a => a.h===h && a.m===m);
   if (match && Notification.permission === 'granted') {
     new Notification(match.title, {body: match.body});
-    // Also auto-run sentinel at key times
-    if ((h===7&&m===0) || (h===14&&m===0) || (h===14&&m===35)) {
-      if (ANTHROPIC_API_KEY) {
-        switchTo('sentinel');
-        setTimeout(runSentinel, 500);
-      }
+  }
+
+  if (!ANTHROPIC_API_KEY) return;
+  // Auto-generate reports + run Sentinel at configured report times
+  const rt = getReportTimes();
+  function parseTM(t) { const [hh,mm] = t.split(':').map(Number); return {h:hh,m:mm}; }
+  for (const slot of REPORT_SLOTS) {
+    const {h:rh, m:rm} = parseTM(rt[slot.id] || '99:99');
+    if (h === rh && m === rm) {
+      const stored = getStoredReports();
+      if (!stored[slot.id]) generateReport(slot.id);
+      // Also auto-run sentinel at first report time
+      if (slot.id === 'r0') { switchTo('sentinel'); setTimeout(runSentinel, 500); }
     }
   }
 }
@@ -2459,6 +2574,28 @@ function removeInstrument(idx) {
   renderWatchlist();
   renderDashboardInstruments();
   startWlRefresh();
+}
+
+function restoreSentinel() {
+  try {
+    const stored = JSON.parse(localStorage.getItem('tj_sentinel'));
+    if (!stored?.data) return;
+    lastSentinelResult = stored.data;
+    renderSentinel(stored.data);
+    updateDashboardSentiment(stored.data);
+    const ts = new Date(stored.ts);
+    const timeStr = ts.toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
+    const dateStr = ts.toLocaleDateString('pl', {timeZone:'Europe/London', day:'numeric', month:'short'});
+    const el = document.getElementById('sent-main-time');
+    if (el) el.textContent = timeStr;
+    const upEl = document.getElementById('sent-updated');
+    if (upEl) upEl.textContent = `Ostatnia aktualizacja: ${timeStr} (${dateStr})`;
+    // Show sentinel active panel
+    const setup  = document.getElementById('sentinel-setup');
+    const active = document.getElementById('sentinel-active');
+    if (setup)  setup.style.display  = 'none';
+    if (active) active.style.display = 'block';
+  } catch(e) {}
 }
 
 // ─── SCANNER ───
@@ -2698,11 +2835,20 @@ loadNews();
 renderWatchlist();
 renderDashboardInstruments();
 scannerRefreshInstruments();
+restoreSentinel();
+renderReportsSection();
 startWlRefresh();
+rebuildAlerts();
 try {
   const strat = localStorage.getItem('tj_strategy');
   const stratEl = document.getElementById('strategy-input');
   if (strat && stratEl) stratEl.value = strat;
+  // Load stored report times into config inputs
+  const rt = getReportTimes();
+  [['rpt-t0','r0'],['rpt-t1','r1'],['rpt-t2','r2']].forEach(([elId, key]) => {
+    const el = document.getElementById(elId);
+    if (el) el.value = rt[key];
+  });
 } catch(e) {}
 </script>
 </body>
