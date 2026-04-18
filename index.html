@@ -896,10 +896,10 @@ body::before {
 
   <div class="stitle">Ten tydzień</div>
   <div class="stats-grid">
-    <div class="stat-box"><div class="sb-label">Win rate</div><div class="sb-val" style="color:var(--green)">64%</div><div class="sb-sub">7W / 4L</div></div>
-    <div class="stat-box"><div class="sb-label">P&L netto</div><div class="sb-val" style="color:var(--green)">+$840</div><div class="sb-sub">Tygodniowy</div></div>
-    <div class="stat-box"><div class="sb-label">Najlepszy</div><div class="sb-val" style="color:var(--green)">+$420</div><div class="sb-sub">GOLD long</div></div>
-    <div class="stat-box"><div class="sb-label">Najgorszy</div><div class="sb-val" style="color:var(--red)">-$180</div><div class="sb-sub">CL short</div></div>
+    <div class="stat-box"><div class="sb-label">Win rate</div><div class="sb-val" id="ds-winrate">—</div><div class="sb-sub" id="ds-wl">—</div></div>
+    <div class="stat-box"><div class="sb-label">P&L netto</div><div class="sb-val" id="ds-pnl">—</div><div class="sb-sub">Tygodniowy</div></div>
+    <div class="stat-box"><div class="sb-label">Najlepszy</div><div class="sb-val" id="ds-best-val">—</div><div class="sb-sub" id="ds-best-sub">—</div></div>
+    <div class="stat-box"><div class="sb-label">Najgorszy</div><div class="sb-val" id="ds-worst-val">—</div><div class="sb-sub" id="ds-worst-sub">—</div></div>
   </div>
 
 </section>
@@ -1954,6 +1954,30 @@ function loadJournalTrades() {
   document.getElementById('js-pnl').textContent = week.length ? (totalPnl>=0?'+':'')+'$'+Math.abs(totalPnl).toFixed(0) : '—';
   document.getElementById('js-pnl').style.color = pnlColor;
   document.getElementById('js-rr').textContent = '—';
+
+  // ── Dashboard "Ten tydzień" stats ──
+  const dsWr  = document.getElementById('ds-winrate');
+  const dsWl  = document.getElementById('ds-wl');
+  const dsPnl = document.getElementById('ds-pnl');
+  const dsBV  = document.getElementById('ds-best-val');
+  const dsBS  = document.getElementById('ds-best-sub');
+  const dsWV  = document.getElementById('ds-worst-val');
+  const dsWS  = document.getElementById('ds-worst-sub');
+  if (dsWr)  { dsWr.textContent = week.length ? wr+'%' : '—'; dsWr.style.color = week.length ? (wr>=50?'var(--green)':'var(--red)') : ''; }
+  if (dsWl)    dsWl.textContent  = week.length ? `${wins.length}W / ${losses.length}L` : '—';
+  if (dsPnl) { dsPnl.textContent = week.length ? (totalPnl>=0?'+':'')+'$'+Math.abs(totalPnl).toFixed(0) : '—'; dsPnl.style.color = week.length ? pnlColor : ''; }
+  if (dsBV && dsBS) {
+    const best = wins.length ? wins.reduce((a,b) => parseFloat(a.pnl)>=parseFloat(b.pnl)?a:b) : null;
+    dsBV.textContent = best ? '+$'+Math.abs(parseFloat(best.pnl)).toFixed(0) : '—';
+    dsBV.style.color = best ? 'var(--green)' : '';
+    dsBS.textContent = best ? best.instrument.split(' ')[0]+' '+(best.direction==='L'?'long':'short') : '—';
+  }
+  if (dsWV && dsWS) {
+    const worst = losses.length ? losses.reduce((a,b) => parseFloat(a.pnl)<=parseFloat(b.pnl)?a:b) : null;
+    dsWV.textContent = worst ? '-$'+Math.abs(parseFloat(worst.pnl)).toFixed(0) : '—';
+    dsWV.style.color = worst ? 'var(--red)' : '';
+    dsWS.textContent = worst ? worst.instrument.split(' ')[0]+' '+(worst.direction==='L'?'long':'short') : '—';
+  }
 
   if (!trades.length) {
     container.innerHTML = `<div style="text-align:center;padding:32px 16px;color:var(--t3)">
