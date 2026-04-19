@@ -1509,7 +1509,7 @@ async function loadCalendar() {
     const BASE = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
     // CALENDAR_WORKER_URL: replace with your Cloudflare Worker URL after deploying calendar-worker.js
     // See README-CALENDAR.md for step-by-step deployment instructions
-    const CALENDAR_WORKER_URL = '';
+    const CALENDAR_WORKER_URL = 'https://trejdovo-api.malin0988.workers.dev';
     const PROXY_URLS = [
       ...(CALENDAR_WORKER_URL ? [CALENDAR_WORKER_URL + '?t=' + Date.now()] : []),
       'https://api.allorigins.win/raw?url=' + encodeURIComponent(BASE + '?t=' + Date.now()),
