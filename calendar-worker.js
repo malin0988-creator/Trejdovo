@@ -1,8 +1,12 @@
 // Trejdovo Calendar Worker
 // Proxies Forex Factory economic calendar JSON with proper CORS headers.
 // Deploy to Cloudflare Workers free tier — see README-CALENDAR.md
+//
+// Supports ?week=next to fetch next week's calendar.
+// Default (no param or ?week=this) fetches current week.
 
-const UPSTREAM = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
+const UPSTREAM_THIS = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
+const UPSTREAM_NEXT = 'https://nfs.faireconomy.media/ff_calendar_nextweek.json';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin':  '*',
@@ -12,7 +16,6 @@ const CORS_HEADERS = {
 
 export default {
   async fetch(request) {
-    // Handle CORS preflight
     if (request.method === 'OPTIONS') {
       return new Response(null, { status: 204, headers: CORS_HEADERS });
     }
@@ -21,10 +24,14 @@ export default {
       return new Response('Method Not Allowed', { status: 405, headers: CORS_HEADERS });
     }
 
+    const { searchParams } = new URL(request.url);
+    const week = searchParams.get('week');
+    const upstream_url = week === 'next' ? UPSTREAM_NEXT : UPSTREAM_THIS;
+
     try {
-      const upstream = await fetch(UPSTREAM, {
+      const upstream = await fetch(upstream_url, {
         headers: { 'User-Agent': 'Trejdovo/1.0' },
-        cf: { cacheTtl: 300 }, // cache 5 minutes in Cloudflare edge
+        cf: { cacheTtl: 300 },
       });
 
       if (!upstream.ok) {

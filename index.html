@@ -1498,11 +1498,16 @@ async function loadCalendar() {
 
   label.textContent = now.toLocaleDateString('pl', {timeZone:'Europe/London', day:'numeric', month:'long', year:'numeric'});
 
-  // Next Monday helpers
+  // Next Monday key as plain YYYY-MM-DD string (avoids timezone parsing bugs)
   const daysToMon   = dow === 0 ? 1 : dow === 6 ? 2 : 0;
   const nextMonDate = new Date(ukNow);
   nextMonDate.setDate(ukNow.getDate() + daysToMon);
-  const nextMonKey  = nextMonDate.toLocaleDateString('en-CA', {timeZone:'Europe/London'});
+  // Use ISO string directly to avoid locale/timezone mis-parsing
+  const nextMonKey  = [
+    nextMonDate.getFullYear(),
+    String(nextMonDate.getMonth() + 1).padStart(2, '0'),
+    String(nextMonDate.getDate()).padStart(2, '0'),
+  ].join('-');
   const nextMonLabel = nextMonDate.toLocaleDateString('pl', {timeZone:'Europe/London', weekday:'long', day:'numeric', month:'long'});
 
   try {
@@ -1510,9 +1515,12 @@ async function loadCalendar() {
     const BASE_NEXT = 'https://nfs.faireconomy.media/ff_calendar_nextweek.json';
     const CALENDAR_WORKER_URL = 'https://trejdovo-calendar.malin0988.workers.dev';
 
-    async function fetchCalFeed(baseUrl) {
+    async function fetchCalFeed(baseUrl, weekParam) {
+      const workerUrl = CALENDAR_WORKER_URL
+        ? CALENDAR_WORKER_URL + '?week=' + (weekParam || 'this') + '&t=' + Date.now()
+        : null;
       const urls = [
-        ...(CALENDAR_WORKER_URL ? [CALENDAR_WORKER_URL + '/calendar?url=' + encodeURIComponent(baseUrl) + '&t=' + Date.now()] : []),
+        ...(workerUrl ? [workerUrl] : []),
         'https://api.allorigins.win/raw?url=' + encodeURIComponent(baseUrl + '?t=' + Date.now()),
         'https://corsproxy.io/?' + encodeURIComponent(baseUrl + '?t=' + Date.now()),
         'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(baseUrl),
@@ -1536,15 +1544,19 @@ async function loadCalendar() {
       return null;
     }
 
-    let all = await fetchCalFeed(BASE_THIS);
+    let all = await fetchCalFeed(BASE_THIS, 'this');
     if (!all) throw new Error('calendar_unavailable');
+    console.log('[Calendar] thisweek raw sample:', JSON.stringify(all.slice(0, 2)));
 
     // On weekends also fetch next week so Monday events are available
     if (isWeekend) {
-      const nextWeek = await fetchCalFeed(BASE_NEXT);
+      const nextWeek = await fetchCalFeed(BASE_NEXT, 'next');
       if (nextWeek) {
+        console.log('[Calendar] nextweek raw sample:', JSON.stringify(nextWeek.slice(0, 2)));
         all = [...all, ...nextWeek];
-        console.log('[Calendar] combined with next-week feed, total:', all.length);
+        console.log('[Calendar] combined total:', all.length);
+      } else {
+        console.warn('[Calendar] nextweek feed unavailable — Monday events may be missing');
       }
     }
 
@@ -1554,12 +1566,13 @@ async function loadCalendar() {
       badge.className   = 'badge b-warn';
 
       console.log('[Calendar] nextMonKey:', nextMonKey, '— total events:', all.length);
-      console.log('[Calendar] event dates sample:', all.slice(0,5).map(e => e.date + ' ' + e.title));
+      console.log('[Calendar] all event date+title:', all.map(e => (e.date||'').substring(0,10) + ' ' + e.title));
       const monEvents = all.filter(e => {
-        const eDay = new Date(e.date).toLocaleDateString('en-CA', {timeZone:'Europe/London'});
+        // Compare first 10 chars of date string (YYYY-MM-DD) to avoid timezone parsing issues
+        const eDay = (e.date || '').substring(0, 10);
         return eDay === nextMonKey && e.impact !== 'Holiday';
-      }).sort((a, b) => new Date(a.date) - new Date(b.date));
-      console.log('[Calendar] Monday events found:', monEvents.length);
+      }).sort((a, b) => (a.date||'').localeCompare(b.date||''));
+      console.log('[Calendar] Monday events found:', monEvents.length, monEvents.map(e => e.title));
 
       let html = `
         <div style="text-align:center;padding:16px 0 12px;color:var(--t3)">
