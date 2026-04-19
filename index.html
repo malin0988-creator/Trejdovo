@@ -2336,18 +2336,21 @@ Analizujesz zamknięty trade pod kątem:
 2. Jakości wejścia i wyjścia
 3. Zarządzania ryzykiem
 4. Psychologii (na podstawie notatki)
-${strategy ? `\nStrategia tradera:\n${strategy}` : ''}
+${strategy ? `\nStrategia tradera:\n${strategy}` : '\nBrak zapisanej strategii — oceń ogólnie.'}
 Odpowiadaj WYŁĄCZNIE po polsku. Bądź konkretny i bezpośredni. Max 120 słów.
-Na końcu dodaj jeden z tych tagów HTML (bez tekstu po nim):
+NIE używaj markdown, gwiazdek ani formatowania — pisz czystym tekstem.
+Na końcu dodaj jeden z tych tagów HTML (bez żadnego innego tekstu po nim):
 <span class="pm-verdict good">✓ ZGODNY ZE STRATEGIĄ</span>
 lub
 <span class="pm-verdict">✗ NIEZGODNY ZE STRATEGIĄ</span>`;
 
     const userMsg = `Trade: ${trade.instrument} ${trade.direction==='L'?'LONG':'SHORT'}
+Data trade'u: ${trade.date} | Sesja: ${trade.session||'—'}
 Entry: ${trade.entry||'—'} | Exit: ${trade.exit||'—'} | P&L: $${trade.pnl}
-Sesja: ${trade.session||'—'} | Data: ${trade.date}
 Notatka tradera: "${trade.note || '(brak)'}"
-Kontekst rynkowy: ${buildTodayContext()}
+
+WAŻNE: Analizujesz trade z dnia ${trade.date} (sesja ${trade.session||'—'}), nie dzisiejszy dzień.
+Kontekst rynkowy (dzisiejszy, do ogólnego tła): ${buildTodayContext()}
 
 Oceń ten trade. Co poszło dobrze? Co można poprawić? Czy był zgodny ze strategią?`;
 
@@ -2526,18 +2529,21 @@ Analizujesz zamknięty trade pod kątem:
 2. Jakości wejścia i wyjścia
 3. Zarządzania ryzykiem
 4. Psychologii (na podstawie notatki)
-${strategy ? `\nStrategia tradera:\n${strategy}` : ''}
+${strategy ? `\nStrategia tradera:\n${strategy}` : '\nBrak zapisanej strategii — oceń ogólnie.'}
 Odpowiadaj WYŁĄCZNIE po polsku. Bądź konkretny i bezpośredni. Max 120 słów.
-Na końcu dodaj jeden z tych tagów HTML (bez tekstu po nim):
+NIE używaj markdown, gwiazdek ani formatowania — pisz czystym tekstem.
+Na końcu dodaj jeden z tych tagów HTML (bez żadnego innego tekstu po nim):
 <span class="pm-verdict good">✓ ZGODNY ZE STRATEGIĄ</span>
 lub
 <span class="pm-verdict">✗ NIEZGODNY ZE STRATEGIĄ</span>`;
 
   const userMsg = `Trade: ${trade.instrument} ${trade.direction==='L'?'LONG':'SHORT'}
+Data trade'u: ${trade.date} | Sesja: ${trade.session||'—'}
 Entry: ${trade.entry||'—'} | Exit: ${trade.exit||'—'} | P&L: $${trade.pnl}
-Sesja: ${trade.session||'—'} | Data: ${trade.date}
 Notatka tradera: "${trade.note || '(brak)'}"
-Kontekst rynkowy: ${buildTodayContext()}
+
+WAŻNE: Analizujesz trade z dnia ${trade.date} (sesja ${trade.session||'—'}), nie dzisiejszy dzień.
+Kontekst rynkowy (dzisiejszy, do ogólnego tła): ${buildTodayContext()}
 
 Oceń ten trade. Co poszło dobrze? Co można poprawić? Czy był zgodny ze strategią?`;
 
