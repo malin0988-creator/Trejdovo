@@ -2270,7 +2270,7 @@ async function saveTrade() {
   const pnlVal = document.getElementById('m-pnl').value;
   if (!pnlVal) { alert('Wpisz P&L trade.'); btn.disabled = false; btn.textContent = 'ZAPISZ TRADE + URUCHOM POST-MORTEM AI'; return; }
 
-  const rawDate = document.getElementById('m-date').value; // YYYY-MM-DD
+  const rawDate = document.getElementById('m-date').value;
   const displayDate = rawDate ? new Date(rawDate + 'T12:00:00').toLocaleDateString('pl') : new Date().toLocaleDateString('pl');
 
   const trade = {
@@ -2286,31 +2286,102 @@ async function saveTrade() {
     rawDate: rawDate || new Date().toLocaleDateString('en-CA')
   };
 
-  // Save to localStorage (Firebase will replace this)
   const trades = JSON.parse(localStorage.getItem('tj_trades') || '[]');
-  trades.unshift(trade);
-  localStorage.setItem('tj_trades', JSON.stringify(trades));
 
-  // Run Post-Mortem if API key available
-  if (ANTHROPIC_API_KEY && trade.note) {
-    btn.textContent = 'Generuję Post-Mortem AI...';
+  if (ANTHROPIC_API_KEY) {
+    // Mark as loading so card shows spinner immediately
+    trade.postmortem = '__loading__';
+    trades.unshift(trade);
+    localStorage.setItem('tj_trades', JSON.stringify(trades));
+    closeModal();
+    btn.disabled = false;
+    btn.textContent = 'ZAPISZ TRADE + URUCHOM POST-MORTEM AI';
+    loadJournalTrades();
+    switchTo('journal');
+
+    // Read screenshot if provided
+    let screenshotB64 = null, screenshotMime = null;
+    const fileInput = document.getElementById('m-file');
+    if (fileInput?.files[0]) {
+      try {
+        screenshotB64 = await new Promise((res, rej) => {
+          const r = new FileReader();
+          r.onload = e => res(e.target.result.split(',')[1]);
+          r.onerror = rej;
+          r.readAsDataURL(fileInput.files[0]);
+        });
+        screenshotMime = fileInput.files[0].type || 'image/jpeg';
+      } catch(e) {}
+    }
+
+    const strategy = localStorage.getItem('tj_strategy') || '';
+    const systemPM = `Jesteś ekspertem Post-Mortem dla Trejdovo — polskiego dziennika tradingowego.
+Analizujesz zamknięty trade pod kątem:
+1. Zgodności ze strategią tradera
+2. Jakości wejścia i wyjścia
+3. Zarządzania ryzykiem
+4. Psychologii (na podstawie notatki)
+${strategy ? `\nStrategia tradera:\n${strategy}` : ''}
+Odpowiadaj WYŁĄCZNIE po polsku. Bądź konkretny i bezpośredni. Max 120 słów.
+Na końcu dodaj jeden z tych tagów HTML (bez tekstu po nim):
+<span class="pm-verdict good">✓ ZGODNY ZE STRATEGIĄ</span>
+lub
+<span class="pm-verdict">✗ NIEZGODNY ZE STRATEGIĄ</span>`;
+
+    const userMsg = `Trade: ${trade.instrument} ${trade.direction==='L'?'LONG':'SHORT'}
+Entry: ${trade.entry||'—'} | Exit: ${trade.exit||'—'} | P&L: $${trade.pnl}
+Sesja: ${trade.session||'—'} | Data: ${trade.date}
+Notatka tradera: "${trade.note || '(brak)'}"
+Kontekst rynkowy: ${buildTodayContext()}
+
+Oceń ten trade. Co poszło dobrze? Co można poprawić? Czy był zgodny ze strategią?`;
+
     try {
-      const pmText = await callClaude(
-        `Jesteś agentem Post-Mortem dla Trejdovo. Analizujesz zamknięty trade i konfrontujesz go z aktualną sytuacją rynkową. Odpowiadaj po polsku, max 80 słów.`,
-        `Trade: ${trade.instrument} ${trade.direction==='L'?'LONG':'SHORT'}, Entry: ${trade.entry||'?'}, Exit: ${trade.exit||'?'}, P&L: $${trade.pnl}, Sesja: ${trade.session||'?'}, Data: ${trade.date}, Notatka tradera: "${trade.note}"\n\nKontekst rynkowy: ${buildTodayContext()}\n\nOceń: czy fundamenty wspierały ten trade? Jaki był błąd lub co poszło dobrze?`,
-        400
-      );
-      trade.postmortem = pmText;
-      trades[0] = trade;
-      localStorage.setItem('tj_trades', JSON.stringify(trades));
-    } catch(e) {}
-  }
+      let pmText;
+      if (screenshotB64) {
+        // Vision call with screenshot
+        const resp = await fetch('https://trejdovo-api.malin0988.workers.dev', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            apiKey: ANTHROPIC_API_KEY,
+            model: 'claude-sonnet-4-5',
+            max_tokens: 500,
+            system: systemPM,
+            messages: [{
+              role: 'user',
+              content: [
+                { type: 'image', source: { type: 'base64', media_type: screenshotMime, data: screenshotB64 } },
+                { type: 'text', text: userMsg + '\n\nAnalizuj też screenshot z TradingView powyżej.' }
+              ]
+            }]
+          })
+        });
+        if (!resp.ok) throw new Error('API ' + resp.status);
+        const data = await resp.json();
+        pmText = Array.isArray(data?.content) ? data.content.map(b=>b.text||'').join('') : (data?.text || data?.result || '');
+      } else {
+        pmText = await callClaude(systemPM, userMsg, 500);
+      }
+      trade.postmortem = pmText || '__error__';
+    } catch(e) {
+      trade.postmortem = `__error__: ${e.message}`;
+    }
 
-  closeModal();
-  btn.disabled = false;
-  btn.textContent = 'ZAPISZ TRADE + URUCHOM POST-MORTEM AI';
-  loadJournalTrades();
-  switchTo('journal');
+    // Update the stored trade
+    const idx = trades.findIndex(t => t.id === trade.id);
+    if (idx !== -1) { trades[idx] = trade; localStorage.setItem('tj_trades', JSON.stringify(trades)); }
+    loadJournalTrades();
+  } else {
+    // No API key — just save
+    trades.unshift(trade);
+    localStorage.setItem('tj_trades', JSON.stringify(trades));
+    closeModal();
+    btn.disabled = false;
+    btn.textContent = 'ZAPISZ TRADE + URUCHOM POST-MORTEM AI';
+    loadJournalTrades();
+    switchTo('journal');
+  }
 }
 
 function loadJournalTrades() {
@@ -2389,7 +2460,13 @@ function loadJournalTrades() {
     ${t.note ? `<div class="tc-note">"${t.note}"</div>` : ''}
     ${t.postmortem ? `<div class="post-mortem">
       <div class="pm-hdr"><div class="pm-dot"></div><span class="pm-label">AI Post-Mortem</span></div>
-      <div class="pm-body">${t.postmortem}</div>
+      <div class="pm-body">${
+        t.postmortem === '__loading__'
+          ? '<div class="ai-gen" style="padding:4px 0"><div class="ai-spinner"></div>AI analizuje trade…</div>'
+          : t.postmortem.startsWith('__error__')
+            ? `<span style="color:var(--red);font-size:10px">⚠ Błąd analizy: ${t.postmortem.replace('__error__: ','')}</span>`
+            : t.postmortem
+      }</div>
     </div>` : ''}
   </div>`;
   }).join('');
