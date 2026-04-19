@@ -1008,8 +1008,11 @@ body::before {
   </div>
 
   <div id="sentinel-active" style="display:none">
-    <button class="btn-primary" onclick="runSentinel()" id="sentinel-run-btn" style="margin-bottom:14px">
+    <button class="btn-primary" onclick="runSentinel()" id="sentinel-run-btn" style="margin-bottom:8px">
       🛡️ URUCHOM ANALIZĘ SENTINEL
+    </button>
+    <button onclick="saveFridayClose()" id="friday-close-btn" style="margin-bottom:14px;display:block;width:100%;padding:7px 12px;background:var(--amber)18;color:var(--amber);border:1px solid var(--amber)44;border-radius:6px;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer;letter-spacing:.05em">
+      📸 ZAPISZ FRIDAY CLOSE
     </button>
 
     <div id="sentinel-loading" style="display:none">
@@ -3069,8 +3072,20 @@ function removeInstrument(idx) {
 function getFridaySnapshot() {
   try {
     const s = JSON.parse(localStorage.getItem('friday_close_snapshot'));
-    return s?.data ? s : null;
+    if (s?.data) return s;
+    // Fallback: use most recent Sentinel analysis
+    const sentinel = JSON.parse(localStorage.getItem('tj_sentinel'));
+    if (sentinel?.data) return { data: sentinel.data, ts: sentinel.ts, isFallback: true };
+    return null;
   } catch { return null; }
+}
+
+function saveFridayClose() {
+  if (!lastSentinelResult) { alert('Najpierw uruchom Sentinel, aby zapisać snapshot.'); return; }
+  localStorage.setItem('friday_close_snapshot', JSON.stringify({data: lastSentinelResult, ts: Date.now()}));
+  showNotif('📸 Friday Close zapisany', {body: 'Snapshot gotowy do Monday Outlook'});
+  const btn = document.getElementById('friday-close-btn');
+  if (btn) { btn.textContent = '✅ Zapisano!'; setTimeout(() => { btn.textContent = '📸 Zapisz Friday Close'; }, 2500); }
 }
 
 function isWeekendNow() {
@@ -3131,13 +3146,19 @@ async function runMondayOutlook() {
   if (results) results.innerHTML = '';
 
   const snap = getFridaySnapshot();
+  const snapLabel = snap
+    ? (snap.isFallback
+        ? `Ostatnia analiza Sentinel (${new Date(snap.ts).toLocaleDateString('pl', {timeZone:'Europe/London'})}, brak dedykowanego Friday Close):`
+        : `Friday Close Snapshot (${new Date(snap.ts).toLocaleDateString('pl', {timeZone:'Europe/London'})}):`
+      )
+    : null;
   const snapSummary = snap
-    ? `Friday Close Data (${new Date(snap.ts).toLocaleDateString('pl', {timeZone:'Europe/London'})}):\n` +
+    ? `${snapLabel}\n` +
       Object.entries(snap.data?.instruments || {}).map(([sym, d]) =>
         `${sym}: ${d?.sentiment || '?'} (score: ${d?.score ?? '?'}), trend: ${d?.trend || '?'}, risk: ${d?.risk ?? '?'}/10. ${d?.reason || ''}`
       ).join('\n') +
       `\nOverall: ${snap.data?.overall || '?'} — ${snap.data?.overall_reason || ''}`
-    : 'Brak Friday Close Snapshot — analizuj na podstawie dostępnych danych.';
+    : 'Brak danych Sentinel — analizuj wyłącznie na podstawie newsów weekendowych.';
 
   // Fetch weekend news headlines
   let newsHeadlines = '';
