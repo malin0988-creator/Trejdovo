@@ -1409,7 +1409,7 @@ async function _checkBgNews() {
       for (const [sym, kws] of keywords) {
         if (!fired.has(sym) && kws.some(kw => tl.includes(kw))) {
           fired.add(sym);
-          new Notification(`⚡ Trejdovo — ${sym}`, {
+          showNotif(`⚡ Trejdovo — ${sym}`, {
             body: title.substring(0, 120),
             tag:  'tj-news-' + sym,
           });
@@ -1507,7 +1507,11 @@ async function loadCalendar() {
 
   try {
     const BASE = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
+    // CALENDAR_WORKER_URL: replace with your Cloudflare Worker URL after deploying calendar-worker.js
+    // See README-CALENDAR.md for step-by-step deployment instructions
+    const CALENDAR_WORKER_URL = '';
     const PROXY_URLS = [
+      ...(CALENDAR_WORKER_URL ? [CALENDAR_WORKER_URL + '?t=' + Date.now()] : []),
       'https://api.allorigins.win/raw?url=' + encodeURIComponent(BASE + '?t=' + Date.now()),
       'https://corsproxy.io/?' + encodeURIComponent(BASE + '?t=' + Date.now()),
       'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(BASE),
@@ -1855,14 +1859,12 @@ async function runSentinel() {
     const now = new Date().toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
     document.getElementById('sent-main-time').textContent = now;
     document.getElementById('sent-updated').textContent = `Ostatnia aktualizacja: ${now}`;
-    if (Notification.permission === 'granted') {
-      const hasZap = Object.values(data.instruments||{}).some(d => d?.zapalnik && d.zapalnik !== 'null');
-      const body = data.setup_alert && data.setup_alert !== 'null'
-        ? `Setup: ${data.setup_alert}`
-        : hasZap ? `Zapalnik fundamentalny wykryty — sprawdź Sentinel`
-        : `Analiza gotowa — ${data.overall||'—'}`;
-      new Notification('🛡️ Trejdovo Sentinel', {body});
-    }
+    const hasZap = Object.values(data.instruments||{}).some(d => d?.zapalnik && d.zapalnik !== 'null');
+    const notifBody = data.setup_alert && data.setup_alert !== 'null'
+      ? `Setup: ${data.setup_alert}`
+      : hasZap ? `Zapalnik fundamentalny wykryty — sprawdź Sentinel`
+      : `Analiza gotowa — ${data.overall||'—'}`;
+    showNotif('🛡️ Trejdovo Sentinel', {body: notifBody});
   } catch(e) {
     results.innerHTML = `<div class="card" style="border-color:rgba(255,61,85,0.3)"><div style="color:var(--red);font-size:12px;padding:4px 0">Błąd: ${e.message}</div></div>`;
   }
@@ -2187,9 +2189,7 @@ async function generateReport(slotId) {
     const data  = JSON.parse(clean);
     saveStoredReport(slotId, data);
     renderReportsSection();
-    if (Notification.permission === 'granted') {
-      new Notification(`⚡ Trejdovo — ${slot.label}`, {body: `Raport AI wygenerowany — sprawdź zakładkę Raporty`});
-    }
+    showNotif(`⚡ Trejdovo — ${slot.label}`, {body: `Raport AI wygenerowany — sprawdź zakładkę Raporty`});
   } catch(e) {
     if (btn) { btn.disabled = false; btn.textContent = '⚡ GENERUJ ' + slotTime; }
     if (loadEl) loadEl.style.display = 'none';
@@ -2661,12 +2661,21 @@ Oceń ten trade. Co poszło dobrze? Co można poprawić? Czy był zgodny ze stra
 }
 
 // ─── PUSH NOTIFICATIONS ───
+function showNotif(title, options = {}) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then(reg => reg.showNotification(title, options)).catch(() => {});
+    }
+  } catch(e) {}
+}
+
 async function requestPush() {
   if (!('Notification' in window)) { alert('Ten browser nie obsługuje powiadomień.'); return; }
   const perm = await Notification.requestPermission();
   if (perm === 'granted') {
     document.getElementById('sp-push').className = 'status-pill sp-live';
-    new Notification('Trejdovo', { body: 'Push notifications aktywne! 🎯', icon: '' });
+    showNotif('Trejdovo', { body: 'Push notifications aktywne! 🎯' });
   }
 }
 
