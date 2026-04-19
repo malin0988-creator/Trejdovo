@@ -266,6 +266,14 @@ body::before {
 .sent-neut  { background:rgba(255,170,0,0.08); color:var(--amber); }
 .inst-note  { font-size:10px; color:var(--t3); margin-top:3px; }
 
+/* ─── RISK BAR ─── */
+.risk-bar-wrap  { display:flex; align-items:center; gap:5px; margin-top:5px; }
+.risk-bar-track { flex:1; height:3px; background:var(--bg3); border-radius:2px; overflow:hidden; }
+.risk-bar-fill  { height:100%; border-radius:2px; background:linear-gradient(to right,var(--green),var(--amber),var(--red)); transition:width 0.8s ease; }
+.risk-lbl       { font-family:var(--mono); font-size:8px; color:var(--t3); min-width:24px; text-align:right; }
+.inst-trend     { font-size:12px; margin-right:2px; }
+.inst-insight   { font-size:10px; color:var(--t3); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
 /* ─── SENTINEL ALERT ─── */
 .sentinel-alert {
   background: linear-gradient(135deg, rgba(255,61,85,0.06), rgba(255,107,53,0.04));
@@ -1807,7 +1815,7 @@ function buildSentinelSystem() {
   const items = getWatchlist();
   const instList = items.map(x => `${x.sym} (${x.name})`).join(', ');
   const instJson = items.map(x =>
-    `    "${x.sym}": { "sentiment": "BULLISH"|"BEARISH"|"NEUTRAL", "score": 0-100, "signal": "WAIT"|"WATCH"|"READY", "reason": "max 2 zdania po polsku", "zapalnik": "null lub opis zapalnika fundamentalnego" }`
+    `    "${x.sym}": { "sentiment": "BULLISH"|"BEARISH"|"NEUTRAL", "score": 0-100, "signal": "WAIT"|"WATCH"|"READY", "reason": "max 2 zdania po polsku", "zapalnik": "null lub opis zapalnika fundamentalnego", "risk": 1-10, "trend": "UP"|"DOWN"|"SIDEWAYS", "correlation": "null lub np. Podąża za BTC", "conflict": "null lub opis konfliktu sygnałów" }`
   ).join(',\n');
   return `Jesteś Sentinel — AI agent strażnik rynku dla aplikacji Trejdovo.
 
@@ -1932,10 +1940,39 @@ function updateDashboardSentiment(data) {
     const tag  = document.getElementById('sm-tag-'  + inst);
     if (fill) { fill.className = 'sm-fill ' + sentClass(d.sentiment); fill.style.width = d.score + '%'; }
     if (tag)  { tag.textContent = d.sentiment.substring(0,4); tag.style.color = sentColor(d.sentiment); }
-    const sentEl = document.getElementById('ds-sent-' + inst);
-    const noteEl = document.getElementById('ds-note-' + inst);
-    if (sentEl) { sentEl.className = 'inst-sent ' + sentInst(d.sentiment); sentEl.textContent = d.sentiment; }
-    if (noteEl) noteEl.textContent = d.reason ? d.reason.split('.')[0] : '—';
+    const sentEl    = document.getElementById('ds-sent-'     + inst);
+    const trendEl   = document.getElementById('ds-trend-'    + inst);
+    const riskEl    = document.getElementById('ds-risk-'     + inst);
+    const riskLblEl = document.getElementById('ds-risk-lbl-' + inst);
+    const insightEl = document.getElementById('ds-insight-'  + inst);
+
+    if (sentEl)  { sentEl.className = 'inst-sent ' + sentInst(d.sentiment); sentEl.textContent = d.sentiment?.substring(0,4) || '—'; }
+
+    if (trendEl) {
+      const arrows = {UP:'↑', DOWN:'↓', SIDEWAYS:'→'};
+      const colors = {UP:'var(--green)', DOWN:'var(--red)', SIDEWAYS:'var(--amber)'};
+      trendEl.textContent = arrows[d.trend] || '→';
+      trendEl.style.color = colors[d.trend] || 'var(--amber)';
+    }
+
+    if (riskEl && d.risk) {
+      const pct = Math.round(((d.risk - 1) / 9) * 100);
+      riskEl.style.width = pct + '%';
+    }
+    if (riskLblEl) riskLblEl.textContent = d.risk ? d.risk + '/10' : '—';
+
+    if (insightEl) {
+      if (d.conflict && d.conflict !== 'null') {
+        insightEl.innerHTML = `⚠️ ${d.conflict}`;
+        insightEl.style.color = 'var(--amber)';
+      } else if (d.correlation && d.correlation !== 'null') {
+        insightEl.innerHTML = `🔗 ${d.correlation}`;
+        insightEl.style.color = 'var(--t2)';
+      } else {
+        insightEl.textContent = d.reason ? d.reason.split('.')[0] : '—';
+        insightEl.style.color = 'var(--t3)';
+      }
+    }
   }
   // ── Update the main sentinel card on Dashboard ──
   const sentMain  = document.getElementById('sent-main');
@@ -2735,12 +2772,20 @@ function renderDashboardInstruments() {
   }
   if (instList) {
     instList.innerHTML = items.map(item => `
-      <div class="inst-row" onclick="switchTo('raporty')">
+      <div class="inst-row" onclick="switchTo('sentinel')">
         <div class="inst-ico" style="background:${item.color}22;color:${item.color};border-radius:8px">${item.sym.substring(0,3)}</div>
-        <div class="inst-info"><div class="inst-name">${item.sym}</div><div class="inst-sub">${item.name}</div></div>
+        <div class="inst-info">
+          <div class="inst-name"><span class="inst-trend" id="ds-trend-${item.sym}">→</span> ${item.sym}</div>
+          <div class="inst-sub">${item.name}</div>
+          <div class="risk-bar-wrap">
+            <span style="font-family:var(--mono);font-size:8px;color:var(--t3);white-space:nowrap">RISK</span>
+            <div class="risk-bar-track"><div class="risk-bar-fill" id="ds-risk-${item.sym}" style="width:40%"></div></div>
+            <span class="risk-lbl" id="ds-risk-lbl-${item.sym}">—</span>
+          </div>
+          <div class="inst-insight" id="ds-insight-${item.sym}">Uruchom Sentinel</div>
+        </div>
         <div class="inst-right">
-          <div class="inst-sent sent-neut" id="ds-sent-${item.sym}">NEUTRAL</div>
-          <div class="inst-note" id="ds-note-${item.sym}">Uruchom Sentinel</div>
+          <div class="inst-sent sent-neut" id="ds-sent-${item.sym}">NEUT</div>
         </div>
       </div>`).join('');
   }
