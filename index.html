@@ -1506,42 +1506,60 @@ async function loadCalendar() {
   const nextMonLabel = nextMonDate.toLocaleDateString('pl', {timeZone:'Europe/London', weekday:'long', day:'numeric', month:'long'});
 
   try {
-    const BASE = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
-    // CALENDAR_WORKER_URL: replace with your Cloudflare Worker URL after deploying calendar-worker.js
-    // See README-CALENDAR.md for step-by-step deployment instructions
+    const BASE_THIS = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
+    const BASE_NEXT = 'https://nfs.faireconomy.media/ff_calendar_nextweek.json';
     const CALENDAR_WORKER_URL = 'https://trejdovo-api.malin0988.workers.dev';
-    const PROXY_URLS = [
-      ...(CALENDAR_WORKER_URL ? [CALENDAR_WORKER_URL + '?t=' + Date.now()] : []),
-      'https://api.allorigins.win/raw?url=' + encodeURIComponent(BASE + '?t=' + Date.now()),
-      'https://corsproxy.io/?' + encodeURIComponent(BASE + '?t=' + Date.now()),
-      'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(BASE),
-      BASE + '?t=' + Date.now(),
-    ];
-    let all = null;
-    let lastProxyErr = null;
-    for (const url of PROXY_URLS) {
-      try {
-        const ctrl = new AbortController();
-        const timer = setTimeout(() => ctrl.abort(), 12000);
-        const resp = await fetch(url, {signal: ctrl.signal});
-        clearTimeout(timer);
-        if (!resp.ok) throw new Error('HTTP ' + resp.status);
-        const text = await resp.text();
-        const parsed = JSON.parse(text);
-        if (Array.isArray(parsed) && parsed.length > 0) { all = parsed; break; }
-      } catch(e) { lastProxyErr = e; }
+
+    async function fetchCalFeed(baseUrl) {
+      const urls = [
+        ...(CALENDAR_WORKER_URL ? [CALENDAR_WORKER_URL + '/calendar?url=' + encodeURIComponent(baseUrl) + '&t=' + Date.now()] : []),
+        'https://api.allorigins.win/raw?url=' + encodeURIComponent(baseUrl + '?t=' + Date.now()),
+        'https://corsproxy.io/?' + encodeURIComponent(baseUrl + '?t=' + Date.now()),
+        'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(baseUrl),
+        baseUrl + '?t=' + Date.now(),
+      ];
+      for (const url of urls) {
+        try {
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 12000);
+          const resp = await fetch(url, {signal: ctrl.signal});
+          clearTimeout(timer);
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          const text = await resp.text();
+          const parsed = JSON.parse(text);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            console.log('[Calendar] fetched', parsed.length, 'events from', url, '— sample:', parsed[0]);
+            return parsed;
+          }
+        } catch(e) { console.warn('[Calendar] proxy failed:', url, e.message); }
+      }
+      return null;
     }
-    if (!all) throw lastProxyErr || new Error('calendar_unavailable');
+
+    let all = await fetchCalFeed(BASE_THIS);
+    if (!all) throw new Error('calendar_unavailable');
+
+    // On weekends also fetch next week so Monday events are available
+    if (isWeekend) {
+      const nextWeek = await fetchCalFeed(BASE_NEXT);
+      if (nextWeek) {
+        all = [...all, ...nextWeek];
+        console.log('[Calendar] combined with next-week feed, total:', all.length);
+      }
+    }
 
     // ── WEEKEND branch ──
     if (isWeekend) {
       badge.textContent = 'Weekend';
       badge.className   = 'badge b-warn';
 
+      console.log('[Calendar] nextMonKey:', nextMonKey, '— total events:', all.length);
+      console.log('[Calendar] event dates sample:', all.slice(0,5).map(e => e.date + ' ' + e.title));
       const monEvents = all.filter(e => {
         const eDay = new Date(e.date).toLocaleDateString('en-CA', {timeZone:'Europe/London'});
         return eDay === nextMonKey && e.impact !== 'Holiday';
       }).sort((a, b) => new Date(a.date) - new Date(b.date));
+      console.log('[Calendar] Monday events found:', monEvents.length);
 
       let html = `
         <div style="text-align:center;padding:16px 0 12px;color:var(--t3)">
@@ -1779,19 +1797,26 @@ async function callClaude(systemPrompt, userMsg, maxTokens = 1200) {
   if (!ANTHROPIC_API_KEY) {
     throw new Error('Brak klucza API. Skonfiguruj go w zakładce Config.');
   }
-  const resp = await fetch('https://trejdovo-api.malin0988.workers.dev', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      apiKey: ANTHROPIC_API_KEY,
-      model: 'claude-sonnet-4-5',
-      max_tokens: maxTokens,
-      system: systemPrompt,
-      messages: [{ role: 'user', content: userMsg }]
-    })
-  });
+  let resp;
+  try {
+    resp = await fetch('https://trejdovo-api.malin0988.workers.dev', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        apiKey: ANTHROPIC_API_KEY,
+        model: 'claude-sonnet-4-5',
+        max_tokens: maxTokens,
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userMsg }]
+      })
+    });
+  } catch(fetchErr) {
+    console.error('[callClaude] fetch failed:', fetchErr);
+    throw new Error('Błąd połączenia z Worker API (' + (fetchErr.message || 'Failed to fetch') + ')');
+  }
   if (!resp.ok) {
     const err = await resp.json().catch(()=>({}));
+    console.error('[callClaude] HTTP error:', resp.status, err);
     throw new Error(err.error?.message || `API error ${resp.status}`);
   }
   const data = await resp.json();
@@ -1866,7 +1891,12 @@ async function runSentinel() {
       : `Analiza gotowa — ${data.overall||'—'}`;
     showNotif('🛡️ Trejdovo Sentinel', {body: notifBody});
   } catch(e) {
-    results.innerHTML = `<div class="card" style="border-color:rgba(255,61,85,0.3)"><div style="color:var(--red);font-size:12px;padding:4px 0">Błąd: ${e.message}</div></div>`;
+    console.error('[Sentinel] error:', e);
+    const isFetch = e.message === 'Failed to fetch' || e.name === 'TypeError';
+    const hint = isFetch
+      ? 'Błąd połączenia z Worker API. Sprawdź czy klucz API jest ustawiony w Config i czy Cloudflare Worker działa.'
+      : e.message;
+    results.innerHTML = `<div class="card" style="border-color:rgba(255,61,85,0.3)"><div style="color:var(--red);font-size:12px;padding:4px 0">Błąd: ${hint}</div></div>`;
   }
 
   btn.disabled = false;
