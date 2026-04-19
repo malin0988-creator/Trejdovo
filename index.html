@@ -1516,6 +1516,7 @@ async function loadCalendar() {
     const CALENDAR_WORKER_URL = 'https://trejdovo-calendar.malin0988.workers.dev';
 
     async function fetchCalFeed(baseUrl, weekParam) {
+      // Worker URL: simple query param, no path — works with both old and new Worker versions
       const workerUrl = CALENDAR_WORKER_URL
         ? CALENDAR_WORKER_URL + '?week=' + (weekParam || 'this') + '&t=' + Date.now()
         : null;
@@ -1529,17 +1530,19 @@ async function loadCalendar() {
       for (const url of urls) {
         try {
           const ctrl = new AbortController();
-          const timer = setTimeout(() => ctrl.abort(), 12000);
+          const timer = setTimeout(() => ctrl.abort(), 20000);
           const resp = await fetch(url, {signal: ctrl.signal});
           clearTimeout(timer);
           if (!resp.ok) throw new Error('HTTP ' + resp.status);
           const text = await resp.text();
+          console.log('[Calendar] raw response from', url, '— first 200 chars:', text.substring(0, 200));
           const parsed = JSON.parse(text);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            console.log('[Calendar] fetched', parsed.length, 'events from', url, '— sample:', parsed[0]);
+            console.log('[Calendar] SUCCESS', parsed.length, 'events from', url);
             return parsed;
           }
-        } catch(e) { console.warn('[Calendar] proxy failed:', url, e.message); }
+          console.warn('[Calendar] response was not a non-empty array from', url, '— got:', typeof parsed, Array.isArray(parsed) ? 'length='+parsed.length : '');
+        } catch(e) { console.error('[Calendar] failed:', url, '—', e.name, e.message); }
       }
       return null;
     }
