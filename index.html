@@ -2343,7 +2343,6 @@ Oceń ten trade. Co poszło dobrze? Co można poprawić? Czy był zgodny ze stra
     try {
       let pmText;
       if (screenshotB64) {
-        // Vision call with screenshot
         const resp = await fetch('https://trejdovo-api.malin0988.workers.dev', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -2361,15 +2360,28 @@ Oceń ten trade. Co poszło dobrze? Co można poprawić? Czy był zgodny ze stra
             }]
           })
         });
-        if (!resp.ok) throw new Error('API ' + resp.status);
+        if (!resp.ok) {
+          const errBody = await resp.json().catch(() => ({}));
+          const msg = errBody?.error?.message || errBody?.message || `HTTP ${resp.status}`;
+          console.error('Post-Mortem vision error:', resp.status, errBody);
+          throw new Error(msg);
+        }
         const data = await resp.json();
+        if (data?.type === 'error') {
+          const msg = data.error?.message || 'Błąd API';
+          console.error('Post-Mortem vision API error:', data);
+          throw new Error(msg);
+        }
         pmText = Array.isArray(data?.content) ? data.content.map(b=>b.text||'').join('') : (data?.text || data?.result || '');
       } else {
         pmText = await callClaude(systemPM, userMsg, 500);
       }
-      trade.postmortem = pmText || '__error__';
+      if (!pmText) throw new Error('Pusta odpowiedź API');
+      trade.postmortem = pmText;
     } catch(e) {
-      trade.postmortem = `__error__: ${e.message}`;
+      const errMsg = e?.message || String(e) || 'Nieznany błąd';
+      console.error('Post-Mortem failed:', errMsg, e);
+      trade.postmortem = `__error__: ${errMsg}`;
     }
 
     // Update the stored trade
@@ -2468,7 +2480,10 @@ function loadJournalTrades() {
         t.postmortem === '__loading__'
           ? '<div class="ai-gen" style="padding:4px 0"><div class="ai-spinner"></div>AI analizuje trade…</div>'
           : t.postmortem.startsWith('__error__')
-            ? `<span style="color:var(--red);font-size:10px">⚠ Błąd analizy: ${t.postmortem.replace('__error__: ','')}</span>`
+            ? `<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+                <span style="color:var(--red);font-size:10px">⚠ ${t.postmortem.replace('__error__: ','')}</span>
+                <button onclick="retryPostMortem(${t.id})" style="background:transparent;border:1px solid var(--purple);color:var(--purple);border-radius:5px;padding:3px 8px;font-size:9px;font-family:var(--mono);cursor:pointer">↻ Ponów analizę</button>
+              </div>`
             : t.postmortem
       }</div>
     </div>` : ''}
@@ -2479,6 +2494,55 @@ function loadJournalTrades() {
 function resetJournalData() {
   if (!confirm("Czy na pewno chcesz usunąć wszystkie trade'y?\nTej operacji nie można cofnąć.")) return;
   localStorage.removeItem('tj_trades');
+  loadJournalTrades();
+}
+
+async function retryPostMortem(tradeId) {
+  if (!ANTHROPIC_API_KEY) { alert('Skonfiguruj klucz API w zakładce Config.'); return; }
+  const trades = JSON.parse(localStorage.getItem('tj_trades') || '[]');
+  const idx = trades.findIndex(t => t.id === tradeId);
+  if (idx === -1) return;
+  const trade = trades[idx];
+
+  trade.postmortem = '__loading__';
+  localStorage.setItem('tj_trades', JSON.stringify(trades));
+  loadJournalTrades();
+
+  const strategy = localStorage.getItem('tj_strategy') || '';
+  const systemPM = `Jesteś ekspertem Post-Mortem dla Trejdovo — polskiego dziennika tradingowego.
+Analizujesz zamknięty trade pod kątem:
+1. Zgodności ze strategią tradera
+2. Jakości wejścia i wyjścia
+3. Zarządzania ryzykiem
+4. Psychologii (na podstawie notatki)
+${strategy ? `\nStrategia tradera:\n${strategy}` : ''}
+Odpowiadaj WYŁĄCZNIE po polsku. Bądź konkretny i bezpośredni. Max 120 słów.
+Na końcu dodaj jeden z tych tagów HTML (bez tekstu po nim):
+<span class="pm-verdict good">✓ ZGODNY ZE STRATEGIĄ</span>
+lub
+<span class="pm-verdict">✗ NIEZGODNY ZE STRATEGIĄ</span>`;
+
+  const userMsg = `Trade: ${trade.instrument} ${trade.direction==='L'?'LONG':'SHORT'}
+Entry: ${trade.entry||'—'} | Exit: ${trade.exit||'—'} | P&L: $${trade.pnl}
+Sesja: ${trade.session||'—'} | Data: ${trade.date}
+Notatka tradera: "${trade.note || '(brak)'}"
+Kontekst rynkowy: ${buildTodayContext()}
+
+Oceń ten trade. Co poszło dobrze? Co można poprawić? Czy był zgodny ze strategią?`;
+
+  try {
+    const pmText = await callClaude(systemPM, userMsg, 500);
+    if (!pmText) throw new Error('Pusta odpowiedź API');
+    trade.postmortem = pmText;
+  } catch(e) {
+    const errMsg = e?.message || String(e) || 'Nieznany błąd';
+    console.error('Post-Mortem retry failed:', errMsg, e);
+    trade.postmortem = `__error__: ${errMsg}`;
+  }
+
+  const fresh = JSON.parse(localStorage.getItem('tj_trades') || '[]');
+  const freshIdx = fresh.findIndex(t => t.id === tradeId);
+  if (freshIdx !== -1) { fresh[freshIdx] = trade; localStorage.setItem('tj_trades', JSON.stringify(fresh)); }
   loadJournalTrades();
 }
 
