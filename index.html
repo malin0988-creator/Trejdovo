@@ -1624,7 +1624,7 @@ function switchTo(id) {
   const map = ['dashboard','scanner','sentinel','raporty','newsy','kalendarz','journal','watchlist','ustawienia'];
   btns[map.indexOf(id)]?.classList.add('on');
   document.getElementById('fab').classList.toggle('hidden', id !== 'journal' && id !== 'dashboard');
-  if (id === 'dashboard') renderDashboardInstruments();
+  if (id === 'dashboard') { renderDashboardInstruments(); if (lastSentinelResult) updateDashboardSentiment(lastSentinelResult); }
   if (id === 'scanner')   scannerRefreshInstruments();
   if (id === 'raporty')   renderReportsSection();
   if (id === 'newsy' && Date.now() - lastNewsLoad > 300000) loadNews();
@@ -1824,15 +1824,13 @@ function renderSentinel(data) {
       <div class="ap-dot"></div>
       <div class="ap-text"><strong>🎯 POTENCJALNY SETUP:</strong> ${data.setup_alert}</div>
     </div>`;
-    // Update dashboard sentinel block
-    document.getElementById('sent-main').className = 'sentinel-alert ok';
-    document.getElementById('sent-main-body').innerHTML = `<strong>Setup wykryty:</strong> ${data.setup_alert}`;
   }
 
   results.innerHTML = html;
 }
 
 function updateDashboardSentiment(data) {
+  if (!data) return;
   const sentColor = s => s==='BULLISH'?'var(--green)':s==='BEARISH'?'var(--red)':'var(--amber)';
   const sentClass = s => s==='BULLISH'?'sf-bull':s==='BEARISH'?'sf-bear':'sf-neut';
   const sentInst  = s => s==='BULLISH'?'sent-bull':s==='BEARISH'?'sent-bear':'sent-neut';
@@ -1846,6 +1844,49 @@ function updateDashboardSentiment(data) {
     const noteEl = document.getElementById('ds-note-' + inst);
     if (sentEl) { sentEl.className = 'inst-sent ' + sentInst(d.sentiment); sentEl.textContent = d.sentiment; }
     if (noteEl) noteEl.textContent = d.reason ? d.reason.split('.')[0] : '—';
+  }
+  // ── Update the main sentinel card on Dashboard ──
+  const sentMain  = document.getElementById('sent-main');
+  const sentIco   = sentMain?.querySelector('.sent-ico');
+  const sentTitle = sentMain?.querySelector('.sent-title');
+  const sentBody  = document.getElementById('sent-main-body');
+  const sentInst2 = document.getElementById('sent-main-inst');
+
+  if (sentMain) {
+    sentMain.className = data.overall === 'RISK-ON' ? 'sentinel-alert ok'
+      : data.overall === 'MIXED' ? 'sentinel-alert warn' : 'sentinel-alert';
+  }
+  if (sentIco)   sentIco.textContent   = data.overall === 'RISK-ON' ? '✅' : data.overall === 'MIXED' ? '⚠️' : '🔴';
+  if (sentTitle) sentTitle.textContent = `${data.overall || '—'} — ${data.overall_reason || ''}`;
+
+  if (sentBody) {
+    if (data.setup_alert && data.setup_alert !== 'null') {
+      sentBody.innerHTML = `<strong>🎯 Setup wykryty:</strong> ${data.setup_alert}`;
+    } else {
+      const zapLines = Object.entries(data.instruments || {})
+        .filter(([, d]) => d?.zapalnik && d.zapalnik !== 'null')
+        .map(([inst, d]) => `🚨 <strong>${inst}:</strong> ${d.zapalnik}`)
+        .join('<br>');
+      if (zapLines) {
+        sentBody.innerHTML = zapLines;
+      } else if (Array.isArray(data.plan_dnia) && data.plan_dnia.length) {
+        sentBody.innerHTML = data.plan_dnia[0];
+      } else {
+        sentBody.innerHTML = 'Brak aktywnych zapalników fundamentalnych.';
+      }
+    }
+  }
+
+  if (sentInst2) {
+    const wlMap = {}; getWatchlist().forEach(x => wlMap[x.sym] = x.color);
+    const instEntries = Object.entries(data.instruments || {});
+    const sentClassBadge = s => s==='BULLISH'?'b-bull':s==='BEARISH'?'b-bear':'b-neut';
+    sentInst2.innerHTML = instEntries
+      .filter(([, d]) => d)
+      .map(([inst, d]) => {
+        const color = wlMap[inst] || 'var(--t2)';
+        return `<span class="sent-tag ${sentClassBadge(d.sentiment)}" style="color:${color}">${inst}</span>`;
+      }).join('');
   }
 }
 
