@@ -1847,6 +1847,14 @@ async function runSentinel() {
     const now = new Date().toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
     document.getElementById('sent-main-time').textContent = now;
     document.getElementById('sent-updated').textContent = `Ostatnia aktualizacja: ${now}`;
+    if (Notification.permission === 'granted') {
+      const hasZap = Object.values(data.instruments||{}).some(d => d?.zapalnik && d.zapalnik !== 'null');
+      const body = data.setup_alert && data.setup_alert !== 'null'
+        ? `Setup: ${data.setup_alert}`
+        : hasZap ? `Zapalnik fundamentalny wykryty — sprawdź Sentinel`
+        : `Analiza gotowa — ${data.overall||'—'}`;
+      new Notification('🛡️ Trejdovo Sentinel', {body});
+    }
   } catch(e) {
     results.innerHTML = `<div class="card" style="border-color:rgba(255,61,85,0.3)"><div style="color:var(--red);font-size:12px;padding:4px 0">Błąd: ${e.message}</div></div>`;
   }
@@ -2142,6 +2150,9 @@ async function generateReport(slotId) {
     const data  = JSON.parse(clean);
     saveStoredReport(slotId, data);
     renderReportsSection();
+    if (Notification.permission === 'granted') {
+      new Notification(`⚡ Trejdovo — ${slot.label}`, {body: `Raport AI wygenerowany — sprawdź zakładkę Raporty`});
+    }
   } catch(e) {
     if (btn) { btn.disabled = false; btn.textContent = '⚡ GENERUJ ' + slotTime; }
     if (loadEl) loadEl.style.display = 'none';
@@ -2617,41 +2628,51 @@ async function requestPush() {
 }
 
 // ─── SCHEDULED ALERTS ───
+let _lastAlertMin = -1;
+
 function checkScheduledAlerts() {
   const uk = new Date(new Date().toLocaleString('en-US', {timeZone:'Europe/London'}));
-  const h = uk.getHours(), m = uk.getMinutes(), s = uk.getSeconds();
-  if (s > 5) return;
+  const h = uk.getHours(), m = uk.getMinutes(), nowMin = h*60 + m;
+
+  // Only run logic once per minute
+  if (nowMin === _lastAlertMin) return;
+  _lastAlertMin = nowMin;
 
   // Reset reports at 06:59 each day
   if (h === 6 && m === 59) { localStorage.removeItem(RPT_KEY); renderReportsSection(); }
 
-  // Push at configured report times
-  if (Notification.permission === 'granted') {
-    const rt = getReportTimes();
-    const slots = [{id:'r0',label:'Alert 1'},{id:'r1',label:'Alert 2'},{id:'r2',label:'Alert 3'}];
-    for (const {id, label} of slots) {
-      const [rh,rm] = (rt[id]||'99:99').split(':').map(Number);
-      if (h===rh && m===rm && document.getElementById('al-'+{r0:'0700',r1:'1400',r2:'1430'}[id])?.checked) {
-        new Notification(`⚡ Trejdovo — ${label}`, {body:'Raport AI gotowy — sprawdź zakładkę Raporty'});
+  if (!ANTHROPIC_API_KEY) return;
+  const rt = getReportTimes();
+  function parseTM(t) { const [hh,mm] = (t||'99:99').split(':').map(Number); return hh*60+mm; }
+
+  for (const slot of REPORT_SLOTS) {
+    const slotMin = parseTM(rt[slot.id]);
+    if (nowMin >= slotMin) {
+      const stored = getStoredReports();
+      if (!stored[slot.id]) {
+        generateReport(slot.id);
+        // Also auto-run sentinel at first report time
+        if (slot.id === 'r0') setTimeout(runSentinel, 3000);
       }
     }
   }
+}
+setInterval(checkScheduledAlerts, 60000);
 
+// On load: auto-generate any reports whose time has already passed today
+function catchUpReports() {
   if (!ANTHROPIC_API_KEY) return;
-  // Auto-generate reports + run Sentinel at configured report times
+  const uk = new Date(new Date().toLocaleString('en-US', {timeZone:'Europe/London'}));
+  const nowMin = uk.getHours()*60 + uk.getMinutes();
   const rt = getReportTimes();
-  function parseTM(t) { const [hh,mm] = t.split(':').map(Number); return {h:hh,m:mm}; }
+  const stored = getStoredReports();
   for (const slot of REPORT_SLOTS) {
-    const {h:rh, m:rm} = parseTM(rt[slot.id] || '99:99');
-    if (h === rh && m === rm) {
-      const stored = getStoredReports();
-      if (!stored[slot.id]) generateReport(slot.id);
-      // Also auto-run sentinel at first report time
-      if (slot.id === 'r0') { switchTo('sentinel'); setTimeout(runSentinel, 500); }
+    const [sh, sm] = (rt[slot.id]||'99:99').split(':').map(Number);
+    if (nowMin >= sh*60+sm && !stored[slot.id]) {
+      generateReport(slot.id);
     }
   }
 }
-setInterval(checkScheduledAlerts, 5000);
 
 // ─── WATCHLIST ───
 const WL_DEFAULTS = [
@@ -3139,6 +3160,12 @@ renderReportsSection();
 startWlRefresh();
 rebuildAlerts();
 startBgNewsMonitor();
+// Request notification permission on first load (after short delay so page renders first)
+if ('Notification' in window && Notification.permission === 'default') {
+  setTimeout(() => Notification.requestPermission(), 3000);
+}
+// Auto-generate any reports whose scheduled time has already passed today
+setTimeout(catchUpReports, 2000);
 try {
   const strat = localStorage.getItem('tj_strategy');
   const stratEl = document.getElementById('strategy-input');
