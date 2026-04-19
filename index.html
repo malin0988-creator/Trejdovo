@@ -1110,38 +1110,38 @@ body::before {
       <div style="flex:1">
         <label class="form-lbl">Raport 1</label>
         <input class="f-input" type="time" id="rpt-t0" value="07:00">
-        <div style="font-size:9px;color:var(--t3);margin-top:3px">Europejski Setup</div>
+        <div style="font-size:9px;color:var(--t3);margin-top:3px">Alert 1</div>
       </div>
       <div style="flex:1">
         <label class="form-lbl">Raport 2</label>
         <input class="f-input" type="time" id="rpt-t1" value="14:00">
-        <div style="font-size:9px;color:var(--t3);margin-top:3px">Pre-market USA</div>
+        <div style="font-size:9px;color:var(--t3);margin-top:3px">Alert 2</div>
       </div>
       <div style="flex:1">
         <label class="form-lbl">Raport 3</label>
         <input class="f-input" type="time" id="rpt-t2" value="14:30">
-        <div style="font-size:9px;color:var(--t3);margin-top:3px">Reakcja na dane</div>
+        <div style="font-size:9px;color:var(--t3);margin-top:3px">Alert 3</div>
       </div>
     </div>
     <button class="btn-primary" style="margin-top:4px" onclick="saveReportTimes()">ZAPISZ CZASY</button>
   </div>
 
   <div class="card">
-    <div class="card-hdr"><span class="card-label">Alerty dzienne</span></div>
+    <div class="card-hdr"><span class="card-label">Alerty push</span></div>
     <div class="set-row">
-      <div><div class="set-label">07:00 UK — Europejski Setup</div><div class="set-sub">Analiza Azji + narracja dnia + plan dla instrumentów</div></div>
+      <div><div class="set-label" id="al-r0-label">Alert 1 — Raport poranny</div><div class="set-sub">Raport AI + uruchomienie Sentinel o skonfigurowanej godzinie</div></div>
       <label class="toggle"><input type="checkbox" id="al-0700" checked><div class="tg-track"></div><div class="tg-thumb"></div></label>
     </div>
     <div class="set-row">
-      <div><div class="set-label">14:00 UK — Pre-market USA</div><div class="set-sub">Scenariusze IF/THEN przed danymi z USA</div></div>
+      <div><div class="set-label" id="al-r1-label">Alert 2 — Raport śróddzienny</div><div class="set-sub">Raport AI o skonfigurowanej godzinie</div></div>
       <label class="toggle"><input type="checkbox" id="al-1400" checked><div class="tg-track"></div><div class="tg-thumb"></div></label>
     </div>
     <div class="set-row">
-      <div><div class="set-label">14:30 UK — Reakcja na dane</div><div class="set-sub">Analiza actual vs forecast, flow kapitału</div></div>
+      <div><div class="set-label" id="al-r2-label">Alert 3 — Raport popołudniowy</div><div class="set-sub">Raport AI o skonfigurowanej godzinie</div></div>
       <label class="toggle"><input type="checkbox" id="al-1430" checked><div class="tg-track"></div><div class="tg-thumb"></div></label>
     </div>
     <div class="set-row">
-      <div><div class="set-label">Dynamiczne alerty</div><div class="set-sub">Gdy ważne dane poza harmonogramem (EIA 15:30, FOMC etc.)</div></div>
+      <div><div class="set-label">Monitoring newsów (15 min)</div><div class="set-sub">Push gdy pojawi się ważny news dotyczący Twoich instrumentów</div></div>
       <label class="toggle"><input type="checkbox" id="al-dyn" checked><div class="tg-track"></div><div class="tg-thumb"></div></label>
     </div>
     <div class="set-row">
@@ -1307,9 +1307,9 @@ function updateClock() {
 }
 // ─── COUNTDOWN ───
 let ALERTS = [
-  {h:7,  m:0,  label:'Europejski Setup',   sub:'Analiza Azji + narracja dnia', slotId:'r0'},
-  {h:14, m:0,  label:'Pre-market USA',      sub:'Scenariusze przed danymi',     slotId:'r1'},
-  {h:14, m:30, label:'Reakcja na dane',     sub:'Po publikacji danych USA',     slotId:'r2'},
+  {h:7,  m:0,  label:'Alert 1', sub:'Raport AI — sprawdź zakładkę Raporty', slotId:'r0'},
+  {h:14, m:0,  label:'Alert 2', sub:'Raport AI — sprawdź zakładkę Raporty', slotId:'r1'},
+  {h:14, m:30, label:'Alert 3', sub:'Raport AI — sprawdź zakładkę Raporty', slotId:'r2'},
 ];
 
 function rebuildAlerts() {
@@ -1317,9 +1317,9 @@ function rebuildAlerts() {
   function p(s) { const [h,m] = s.split(':').map(Number); return {h, m}; }
   const t0 = p(rt.r0), t1 = p(rt.r1), t2 = p(rt.r2);
   const base = [
-    {h:t0.h, m:t0.m, label:'Europejski Setup',  sub:'Analiza Azji + narracja dnia', slotId:'r0'},
-    {h:t1.h, m:t1.m, label:'Pre-market USA',     sub:'Scenariusze przed danymi',     slotId:'r1'},
-    {h:t2.h, m:t2.m, label:'Reakcja na dane',    sub:'Po publikacji danych USA',     slotId:'r2'},
+    {h:t0.h, m:t0.m, label:'Alert 1', sub:'Raport AI — sprawdź zakładkę Raporty', slotId:'r0'},
+    {h:t1.h, m:t1.m, label:'Alert 2', sub:'Raport AI — sprawdź zakładkę Raporty', slotId:'r1'},
+    {h:t2.h, m:t2.m, label:'Alert 3', sub:'Raport AI — sprawdź zakładkę Raporty', slotId:'r2'},
   ];
   const calAlerts = calendarData.filter(e => e.impact === 'High').map(e => {
     const d = new Date(e.date);
@@ -1331,6 +1331,92 @@ function rebuildAlerts() {
     };
   });
   ALERTS = [...base, ...calAlerts].sort((a, b) => a.h*60+a.m - (b.h*60+b.m));
+}
+
+// ─── FETCH WITH RETRY ───
+async function fetchWithRetry(url, opts = {}, maxTries = 3, baseDelay = 2000) {
+  let lastErr;
+  for (let i = 1; i <= maxTries; i++) {
+    try {
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 15000);
+      const resp = await fetch(url, {...opts, signal: ctrl.signal});
+      clearTimeout(timer);
+      if (!resp.ok) throw new Error('HTTP ' + resp.status);
+      return resp;
+    } catch(e) {
+      lastErr = e;
+      if (i < maxTries) await new Promise(r => setTimeout(r, baseDelay * i));
+    }
+  }
+  throw lastErr;
+}
+
+// ─── BACKGROUND NEWS MONITOR ───
+let _bgSeenHeadlines = new Set(JSON.parse(localStorage.getItem('tj_seen_hl') || '[]'));
+let _bgNewsTimer = null;
+
+function _buildWlKeywords() {
+  const map = new Map();
+  for (const item of getWatchlist()) {
+    const s = item.sym.toLowerCase();
+    const kw = [s, item.name.toLowerCase().split(' ')[0]];
+    if (['btc','eth','sol','bnb','xrp','doge','ada','avax','link','ltc'].includes(s))
+      kw.push('bitcoin','crypto','ethereum','blockchain','digital asset','sec','etf');
+    if (['nq','es','ym','rty','spy','qqq'].includes(s))
+      kw.push('nasdaq','s&p','dow','stocks','equities','fed','fomc','interest rate');
+    if (['cl','usoil'].includes(s))
+      kw.push('crude','oil','opec','petroleum','barrel','energy');
+    if (['gold','gc','xau','xauusd'].includes(s))
+      kw.push('gold','bullion','precious metals');
+    if (['ng'].includes(s))
+      kw.push('natural gas','lng','gas storage');
+    map.set(item.sym, kw);
+  }
+  return map;
+}
+
+async function _checkBgNews() {
+  if (Notification.permission !== 'granted') return;
+  if (!document.getElementById('al-dyn')?.checked) return;
+  try {
+    const rssUrl   = 'https://feeds.finance.yahoo.com/rss/2.0/headline?s=SPY,QQQ,GC=F,CL=F,BTC-USD&region=US&lang=en-US&count=20';
+    const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(rssUrl);
+    const resp     = await fetchWithRetry(proxyUrl, {}, 2, 3000);
+    const xml      = new DOMParser().parseFromString(await resp.text(), 'text/xml');
+    const items    = Array.from(xml.querySelectorAll('item'));
+    const keywords = _buildWlKeywords();
+    const fired    = new Set();
+
+    for (const item of items) {
+      const title = item.querySelector('title')?.textContent || '';
+      const id    = title.substring(0, 80);
+      if (_bgSeenHeadlines.has(id)) continue;
+      _bgSeenHeadlines.add(id);
+      const tl = title.toLowerCase();
+      for (const [sym, kws] of keywords) {
+        if (!fired.has(sym) && kws.some(kw => tl.includes(kw))) {
+          fired.add(sym);
+          new Notification(`⚡ Trejdovo — ${sym}`, {
+            body: title.substring(0, 120),
+            tag:  'tj-news-' + sym,
+          });
+          break;
+        }
+      }
+      if (fired.size >= 2) break; // max 2 notifications per sweep
+    }
+
+    // Keep last 150 seen headlines
+    const arr = [..._bgSeenHeadlines].slice(-150);
+    _bgSeenHeadlines = new Set(arr);
+    localStorage.setItem('tj_seen_hl', JSON.stringify(arr));
+  } catch(e) { /* silent — background only */ }
+}
+
+function startBgNewsMonitor() {
+  if (_bgNewsTimer) clearInterval(_bgNewsTimer);
+  _bgNewsTimer = setInterval(_checkBgNews, 15 * 60 * 1000);
 }
 
 // ─── LIVE MACRO CALENDAR (Forex Factory) ───
@@ -1408,8 +1494,7 @@ async function loadCalendar() {
   const nextMonLabel = nextMonDate.toLocaleDateString('pl', {timeZone:'Europe/London', weekday:'long', day:'numeric', month:'long'});
 
   try {
-    const resp = await fetch('https://nfs.faireconomy.media/ff_calendar_thisweek.json?t=' + Date.now());
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const resp = await fetchWithRetry('https://nfs.faireconomy.media/ff_calendar_thisweek.json?t=' + Date.now(), {}, 3, 2000);
     const all = await resp.json();
 
     // ── WEEKEND branch ──
@@ -1514,24 +1599,18 @@ async function loadCalendar() {
   } catch(err) {
     badge.textContent = 'Offline';
     badge.className   = 'badge b-off';
-
-    let msg, detail;
-    if (err.name === 'AbortError' || err.message === 'Failed to fetch' || err.name === 'TypeError') {
-      msg    = 'Brak połączenia z internetem';
-      detail = 'Sprawdź połączenie i odśwież stronę.';
-    } else if (err.message.startsWith('HTTP')) {
-      msg    = 'Kalendarz chwilowo niedostępny';
-      detail = 'Serwis danych jest offline. Spróbuj za kilka minut.';
-    } else {
-      msg    = 'Nie można pobrać kalendarza';
-      detail = 'Spróbuj odświeżyć stronę.';
-    }
-
+    const msg = (err.name === 'AbortError' || err.message?.includes('408'))
+      ? 'Kalendarz chwilowo niedostępny — spróbuj za chwilę'
+      : (err.message === 'Failed to fetch' || err.name === 'TypeError')
+        ? 'Brak połączenia z internetem'
+        : 'Kalendarz chwilowo niedostępny';
     container.innerHTML = `
       <div style="text-align:center;padding:20px 0;color:var(--t3)">
         <div style="font-size:20px;margin-bottom:8px">📡</div>
         <div style="font-size:12px;font-weight:600;color:var(--t2)">${msg}</div>
-        <div style="font-size:11px;margin-top:4px">${detail}</div>
+        <div style="font-size:11px;margin-top:6px;color:var(--t3)">Automatyczna próba ponownego ładowania za chwilę</div>
+        <button class="btn-primary" style="width:auto;padding:6px 14px;font-size:10px;margin:10px 0 0"
+          onclick="this.disabled=true;this.textContent='Ładuję…';loadCalendar()">↻ Spróbuj teraz</button>
       </div>`;
   }
 }
@@ -1575,7 +1654,7 @@ function updateCountdown(uk) {
   }
   if (!next) {
     // All today's events passed — show first alert tomorrow
-    const first = ALERTS[0] || {h:7, m:0, label:'Europejski Setup', sub:'Następna sesja'};
+    const first = ALERTS[0] || {h:7, m:0, label:'Alert 1', sub:'Następna sesja'};
     document.getElementById('na-time').textContent  = `${pad(first.h)}:${pad(first.m)}`;
     document.getElementById('na-label').textContent = first.label;
     document.getElementById('na-sub').textContent   = 'Następna sesja — jutro';
@@ -1917,9 +1996,9 @@ function buildReportHtml(data, label, timeStr) {
 }
 
 const REPORT_SLOTS = [
-  {id:'r0', label:'Europejski Setup',  desc:'Narracja dnia, analiza Azji, plan sesji europejskiej',   ctx:'Wygeneruj raport poranny (European Setup). Analiza nocnych ruchów Azji, narracja dnia, plan sesji 07:00–12:00 UK.'},
-  {id:'r1', label:'Pre-market USA',    desc:'Scenariusze IF/THEN przed otwarciem NYSE',                ctx:'Wygeneruj raport pre-market USA. Scenariusze IF/THEN dla nadchodzących danych, kluczowe poziomy na otwarcie NYSE.'},
-  {id:'r2', label:'Reakcja na dane',   desc:'Actual vs Forecast, kierunek kapitału po danych USA',    ctx:'Wygeneruj raport post-data. Oceń actual vs forecast z kalendarza makro, kierunek przepływu kapitału, co robić przez kolejne 2-4h.'},
+  {id:'r0', label:'Alert 1', desc:'Raport poranny — analiza sytuacji rynkowej i plan dnia',          ctx:'Wygeneruj raport poranny. Analiza nocnych ruchów, narracja dnia, plan sesji.'},
+  {id:'r1', label:'Alert 2', desc:'Raport śróddzienny — aktualizacja sytuacji i scenariusze',        ctx:'Wygeneruj raport śróddzienny. Aktualizacja sytuacji rynkowej, scenariusze dla kolejnych godzin.'},
+  {id:'r2', label:'Alert 3', desc:'Raport popołudniowy — analiza po danych, kierunek kapitału',      ctx:'Wygeneruj raport popołudniowy. Oceń bieżącą sytuację rynkową, dane opublikowane i co robić przez kolejne 2-4h.'},
 ];
 
 function renderReportsSection() {
@@ -2023,15 +2102,11 @@ async function loadNews() {
   const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(rssUrl);
 
   try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 10000);
-    const resp = await fetch(proxyUrl, {signal: ctrl.signal});
-    clearTimeout(t);
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const resp = await fetchWithRetry(proxyUrl, {}, 3, 2000);
     const text = await resp.text();
     const xml   = new DOMParser().parseFromString(text, 'text/xml');
     const items = Array.from(xml.querySelectorAll('item')).slice(0, 12);
-    if (!items.length) throw new Error('Brak danych');
+    if (!items.length) throw new Error('feed_empty');
 
     const dotColor = title => {
       const t = title.toLowerCase();
@@ -2061,7 +2136,18 @@ async function loadNews() {
     if (badge)   { badge.textContent = '● LIVE'; badge.className = 'badge b-live'; }
     if (updated) updated.textContent = 'Aktualizacja: ' + new Date().toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
   } catch(e) {
-    container.innerHTML = `<div style="color:var(--t3);font-size:11px;padding:12px 0;text-align:center">Nie można pobrać newsów: ${e.message}</div>`;
+    const msg = e.message === 'feed_empty'
+      ? 'Feed newsów chwilowo pusty — spróbuj za chwilę'
+      : (e.name === 'AbortError' || e.message?.includes('408'))
+        ? 'Newsy chwilowo niedostępne — przekroczono czas połączenia'
+        : 'Newsy chwilowo niedostępne';
+    container.innerHTML = `
+      <div style="text-align:center;padding:20px 0;color:var(--t3)">
+        <div style="font-size:18px;margin-bottom:6px">📡</div>
+        <div style="font-size:12px;font-weight:600;color:var(--t2)">${msg}</div>
+        <button class="btn-primary" style="width:auto;padding:6px 14px;font-size:10px;margin:10px 0 0"
+          onclick="this.disabled=true;this.textContent='Ładuję…';loadNews()">↻ Spróbuj ponownie</button>
+      </div>`;
     if (badge) { badge.textContent = 'Offline'; badge.className = 'badge b-off'; }
   }
 }
@@ -2327,15 +2413,16 @@ function checkScheduledAlerts() {
   // Reset reports at 06:59 each day
   if (h === 6 && m === 59) { localStorage.removeItem(RPT_KEY); renderReportsSection(); }
 
-  const pushAlerts = [
-    {h:7,  m:0,  title:'Trejdovo 07:00', body:'Europejski Setup — sprawdź zakładkę Raporty'},
-    {h:14, m:0,  title:'Trejdovo 14:00', body:'Pre-market USA — 30 min do otwarcia NYSE'},
-    {h:14, m:25, title:'⚠️ Trejdovo', body:'Za 5 minut: dane USA — wysoki wpływ na Twoje instrumenty'},
-    {h:15, m:25, title:'⚠️ Trejdovo', body:'Za 5 minut: EIA Natural Gas'},
-  ];
-  const match = pushAlerts.find(a => a.h===h && a.m===m);
-  if (match && Notification.permission === 'granted') {
-    new Notification(match.title, {body: match.body});
+  // Push at configured report times
+  if (Notification.permission === 'granted') {
+    const rt = getReportTimes();
+    const slots = [{id:'r0',label:'Alert 1'},{id:'r1',label:'Alert 2'},{id:'r2',label:'Alert 3'}];
+    for (const {id, label} of slots) {
+      const [rh,rm] = (rt[id]||'99:99').split(':').map(Number);
+      if (h===rh && m===rm && document.getElementById('al-'+{r0:'0700',r1:'1400',r2:'1430'}[id])?.checked) {
+        new Notification(`⚡ Trejdovo — ${label}`, {body:'Raport AI gotowy — sprawdź zakładkę Raporty'});
+      }
+    }
   }
 
   if (!ANTHROPIC_API_KEY) return;
@@ -2839,6 +2926,7 @@ restoreSentinel();
 renderReportsSection();
 startWlRefresh();
 rebuildAlerts();
+startBgNewsMonitor();
 try {
   const strat = localStorage.getItem('tj_strategy');
   const stratEl = document.getElementById('strategy-input');
