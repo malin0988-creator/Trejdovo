@@ -839,6 +839,21 @@ body::before {
 .sl-val { color:var(--red); }
 .tp-val { color:var(--green); }
 .rr-val { color:var(--cyan); }
+
+/* ─── WEEKEND MODE ─── */
+.weekend-banner { background:linear-gradient(135deg,rgba(139,124,248,0.08),rgba(0,200,232,0.05)); border:1px solid rgba(139,124,248,0.25); border-radius:12px; padding:14px 16px; margin-bottom:12px; }
+.wb-hdr { display:flex; align-items:center; gap:8px; margin-bottom:6px; }
+.wb-ico { font-size:18px; }
+.wb-title { font-family:var(--mono); font-size:11px; font-weight:700; color:var(--purple); letter-spacing:0.5px; }
+.wb-ts { font-size:10px; color:var(--t3); margin-left:auto; }
+.wb-body { font-size:11px; color:var(--t2); line-height:1.6; }
+.outlook-scenario { border-radius:10px; padding:12px 14px; margin-bottom:8px; }
+.scenario-bull { background:rgba(0,217,126,0.06); border:1px solid rgba(0,217,126,0.2); }
+.scenario-bear { background:rgba(255,61,85,0.06); border:1px solid rgba(255,61,85,0.2); }
+.scenario-title { font-family:var(--mono); font-size:10px; font-weight:700; margin-bottom:6px; }
+.scenario-bull .scenario-title { color:var(--green); }
+.scenario-bear .scenario-title { color:var(--red); }
+.weekend-alert-banner { background:linear-gradient(135deg,rgba(255,170,0,0.1),rgba(255,107,53,0.08)); border:1px solid rgba(255,170,0,0.3); border-radius:10px; padding:12px 14px; margin-bottom:10px; }
 </style>
 </head>
 <body>
@@ -912,6 +927,8 @@ body::before {
     </div>
     <div class="sent-inst" id="sent-main-inst"></div>
   </div>
+
+  <div id="weekend-alert-container"></div>
 
   <div class="stitle">Sentyment instrumentów</div>
 
@@ -1423,6 +1440,15 @@ async function _checkBgNews() {
             body: title.substring(0, 120),
             tag:  'tj-news-' + sym,
           });
+          // Also persist weekend alerts for Dashboard banner
+          if (isWeekendNow()) {
+            try {
+              const alerts = JSON.parse(localStorage.getItem('tj_weekend_alerts') || '[]');
+              alerts.unshift({sym, title, ts: Date.now()});
+              localStorage.setItem('tj_weekend_alerts', JSON.stringify(alerts.slice(0, 10)));
+              renderWeekendAlerts();
+            } catch {}
+          }
           break;
         }
       }
@@ -1766,8 +1792,9 @@ function switchTo(id) {
   const map = ['dashboard','scanner','sentinel','raporty','newsy','kalendarz','journal','watchlist','ustawienia'];
   btns[map.indexOf(id)]?.classList.add('on');
   document.getElementById('fab').classList.toggle('hidden', id !== 'journal' && id !== 'dashboard');
-  if (id === 'dashboard') { renderDashboardInstruments(); if (lastSentinelResult) updateDashboardSentiment(lastSentinelResult); }
+  if (id === 'dashboard') { renderDashboardInstruments(); if (lastSentinelResult) updateDashboardSentiment(lastSentinelResult); applyWeekendMode(); }
   if (id === 'scanner')   scannerRefreshInstruments();
+  if (id === 'sentinel')  applyWeekendMode();
   if (id === 'raporty')   renderReportsSection();
   if (id === 'newsy' && Date.now() - lastNewsLoad > 300000) loadNews();
 }
@@ -2764,6 +2791,18 @@ function checkScheduledAlerts() {
   // Reset reports at 06:59 each day
   if (h === 6 && m === 59) { localStorage.removeItem(RPT_KEY); renderReportsSection(); }
 
+  // Clear weekend alerts on Monday 06:59
+  if (h === 6 && m === 59 && uk.getDay() === 1) {
+    localStorage.removeItem('tj_weekend_alerts');
+  }
+
+  // Auto-save Friday close snapshot at 21:00 UK
+  const ukDay = uk.getDay(); // 5=Friday
+  if (ukDay === 5 && h === 21 && m === 0 && lastSentinelResult) {
+    localStorage.setItem('friday_close_snapshot', JSON.stringify({data: lastSentinelResult, ts: Date.now()}));
+    showNotif('📸 Trejdovo', {body: 'Friday Close Snapshot zapisany. Dobrego weekendu!'});
+  }
+
   if (!ANTHROPIC_API_KEY) return;
   const rt = getReportTimes();
   function parseTM(t) { const [hh,mm] = (t||'99:99').split(':').map(Number); return hh*60+mm; }
@@ -3027,6 +3066,150 @@ function removeInstrument(idx) {
   startWlRefresh();
 }
 
+function getFridaySnapshot() {
+  try {
+    const s = JSON.parse(localStorage.getItem('friday_close_snapshot'));
+    return s?.data ? s : null;
+  } catch { return null; }
+}
+
+function isWeekendNow() {
+  const uk = new Date(new Date().toLocaleString('en-US', {timeZone:'Europe/London'}));
+  const d = uk.getDay();
+  return d === 0 || d === 6;
+}
+
+function renderWeekendAlerts() {
+  const container = document.getElementById('weekend-alert-container');
+  if (!container) return;
+  try {
+    const alerts = JSON.parse(localStorage.getItem('tj_weekend_alerts') || '[]');
+    if (!alerts.length) { container.innerHTML = ''; return; }
+    container.innerHTML = alerts.slice(0, 3).map(a => `
+      <div class="weekend-alert-banner">
+        <div style="font-family:var(--mono);font-size:9px;font-weight:700;color:var(--amber);margin-bottom:4px">⚡ WEEKEND ALERT — ${a.sym}</div>
+        <div style="font-size:11px;color:var(--t2)">${a.title}</div>
+        <div style="font-size:9px;color:var(--t3);margin-top:3px">${new Date(a.ts).toLocaleString('pl', {timeZone:'Europe/London', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'})}</div>
+      </div>`).join('');
+  } catch {}
+}
+
+function applyWeekendMode() {
+  if (!isWeekendNow()) return;
+  const snap = getFridaySnapshot();
+
+  // Update sentinel button for weekend
+  const btn = document.getElementById('sentinel-run-btn');
+  if (btn) {
+    btn.textContent = '🌅 GENERUJ MONDAY OUTLOOK';
+    btn.onclick = runMondayOutlook;
+  }
+
+  // Show Friday snapshot on Dashboard sentinel card
+  if (snap) {
+    const ts = new Date(snap.ts);
+    const dateStr = ts.toLocaleDateString('pl', {timeZone:'Europe/London', weekday:'long', day:'numeric', month:'short'});
+    const timeStr = ts.toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
+    const sentUpdEl = document.getElementById('sent-updated');
+    if (sentUpdEl) sentUpdEl.textContent = `Friday Close: ${dateStr}, ${timeStr}`;
+    updateDashboardSentiment(snap.data);
+    lastSentinelResult = snap.data;
+  }
+
+  renderWeekendAlerts();
+}
+
+async function runMondayOutlook() {
+  if (!ANTHROPIC_API_KEY) { alert('Skonfiguruj klucz API w zakładce Config.'); return; }
+  const btn = document.getElementById('sentinel-run-btn');
+  const loading = document.getElementById('sentinel-loading');
+  const results = document.getElementById('sentinel-results');
+
+  btn.disabled = true;
+  btn.textContent = 'Generuję Monday Outlook...';
+  if (loading) loading.style.display = 'block';
+  if (results) results.innerHTML = '';
+
+  const snap = getFridaySnapshot();
+  const snapSummary = snap
+    ? `Friday Close Data (${new Date(snap.ts).toLocaleDateString('pl', {timeZone:'Europe/London'})}):\n` +
+      Object.entries(snap.data?.instruments || {}).map(([sym, d]) =>
+        `${sym}: ${d?.sentiment || '?'} (score: ${d?.score ?? '?'}), trend: ${d?.trend || '?'}, risk: ${d?.risk ?? '?'}/10. ${d?.reason || ''}`
+      ).join('\n') +
+      `\nOverall: ${snap.data?.overall || '?'} — ${snap.data?.overall_reason || ''}`
+    : 'Brak Friday Close Snapshot — analizuj na podstawie dostępnych danych.';
+
+  // Fetch weekend news headlines
+  let newsHeadlines = '';
+  try {
+    const rssUrl = 'https://feeds.finance.yahoo.com/rss/2.0/headline?s=SPY,QQQ,GC=F,CL=F,BTC-USD&region=US&lang=en-US&count=30';
+    const proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(rssUrl);
+    const resp = await fetch(proxy, {signal: AbortSignal.timeout(10000)});
+    const xml = await resp.text();
+    const titles = [...xml.matchAll(/<title><!\[CDATA\[(.+?)\]\]><\/title>/g)].map(m => m[1]).slice(1, 15);
+    newsHeadlines = titles.length ? titles.map(t => '- ' + t).join('\n') : 'Brak newsów.';
+  } catch { newsHeadlines = 'Nie udało się pobrać newsów weekendowych.'; }
+
+  const system = `Jesteś ekspertem analizy rynków finansowych. Na podstawie Friday Close i newsów weekendowych wygeneruj Monday Outlook.
+Odpowiadaj TYLKO w formacie JSON:
+{
+  "summary": "Krótkie podsumowanie sytuacji (max 2 zdania)",
+  "scenario_bull": { "title": "Bullish — warunki do wzrostów", "description": "max 3 zdania", "key_catalyst": "główny katalizator" },
+  "scenario_bear": { "title": "Bearish — ryzyko spadków", "description": "max 3 zdania", "key_catalyst": "główny katalizator" },
+  "instruments": { ${getWatchlist().map(x => `"${x.sym}": {"outlook": "BULLISH|BEARISH|NEUTRAL", "risk_monday": 1-10, "note": "max 1 zdanie"}`).join(', ')} },
+  "recommendation": "Co robić na otwarciu w poniedziałek (max 2 zdania)"
+}`;
+
+  const userMsg = `${snapSummary}\n\nNewsy weekendowe:\n${newsHeadlines}\n\nWygeneruj Monday Outlook dla ${new Date().toLocaleDateString('pl', {timeZone:'Europe/London', weekday:'long', day:'numeric', month:'long'})}.`;
+
+  try {
+    const raw = await callClaude(system, userMsg, 900);
+    const data = JSON.parse(raw.replace(/```json|```/g, '').trim());
+
+    if (results) {
+      results.innerHTML = `
+        <div class="weekend-banner" style="margin-bottom:12px">
+          <div class="wb-hdr">
+            <span class="wb-ico">🌅</span>
+            <span class="wb-title">MONDAY OUTLOOK</span>
+            <span class="wb-ts">${new Date().toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'})}</span>
+          </div>
+          <div class="wb-body">${data.summary || ''}</div>
+        </div>
+        <div class="outlook-scenario scenario-bull">
+          <div class="scenario-title">📈 ${data.scenario_bull?.title || 'Bullish Scenario'}</div>
+          <div style="font-size:11px;color:var(--t2);line-height:1.6">${data.scenario_bull?.description || ''}</div>
+          <div style="font-size:10px;color:var(--green);margin-top:6px">🔑 ${data.scenario_bull?.key_catalyst || ''}</div>
+        </div>
+        <div class="outlook-scenario scenario-bear">
+          <div class="scenario-title">📉 ${data.scenario_bear?.title || 'Bearish Scenario'}</div>
+          <div style="font-size:11px;color:var(--t2);line-height:1.6">${data.scenario_bear?.description || ''}</div>
+          <div style="font-size:10px;color:var(--red);margin-top:6px">🔑 ${data.scenario_bear?.key_catalyst || ''}</div>
+        </div>
+        ${Object.entries(data.instruments || {}).map(([sym, d]) => {
+          const col = d.outlook==='BULLISH'?'var(--green)':d.outlook==='BEARISH'?'var(--red)':'var(--amber)';
+          return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+            <span style="font-family:var(--mono);font-weight:700;font-size:11px;min-width:40px">${sym}</span>
+            <span style="font-family:var(--mono);font-size:9px;padding:2px 6px;border-radius:4px;background:${col}22;color:${col}">${d.outlook||'?'}</span>
+            <span style="font-size:9px;color:var(--t3)">Risk Mon: ${d.risk_monday||'?'}/10</span>
+            <span style="font-size:10px;color:var(--t2);flex:1">${d.note||''}</span>
+          </div>`;
+        }).join('')}
+        <div style="padding:10px 0;font-size:11px;color:var(--t2);border-top:1px solid var(--border);margin-top:4px">
+          <strong style="color:var(--cyan)">💡 Rekomendacja:</strong> ${data.recommendation||''}
+        </div>`;
+    }
+    showNotif('🌅 Monday Outlook gotowy', {body: data.summary || 'Sprawdź zakładkę Sentinel'});
+  } catch(e) {
+    console.error('[MondayOutlook]', e);
+    if (results) results.innerHTML = `<div style="color:var(--red);font-size:12px">Błąd: ${e.message}</div>`;
+  }
+
+  btn.disabled = false;
+  btn.textContent = '🌅 GENERUJ MONDAY OUTLOOK';
+  if (loading) loading.style.display = 'none';
+}
+
 function restoreSentinel() {
   try {
     const stored = JSON.parse(localStorage.getItem('tj_sentinel'));
@@ -3287,6 +3470,7 @@ renderWatchlist();
 renderDashboardInstruments();
 scannerRefreshInstruments();
 restoreSentinel();
+if (isWeekendNow()) applyWeekendMode();
 renderReportsSection();
 startWlRefresh();
 rebuildAlerts();
