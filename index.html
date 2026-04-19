@@ -2867,9 +2867,15 @@ function checkScheduledAlerts() {
   // Reset reports at 06:59 each day
   if (h === 6 && m === 59) { localStorage.removeItem(RPT_KEY); renderReportsSection(); }
 
-  // Clear weekend alerts on Monday 06:59
-  if (h === 6 && m === 59 && uk.getDay() === 1) {
-    localStorage.removeItem('tj_weekend_alerts');
+  // Clear weekend data on Monday 06:59 / 07:00
+  if (uk.getDay() === 1) {
+    if (h === 6 && m === 59) localStorage.removeItem('tj_weekend_alerts');
+    if (h === 7 && m === 0) {
+      localStorage.removeItem('monday_outlook_report');
+      // Reset sentinel button back to normal run
+      const runBtn = document.getElementById('sentinel-run-btn');
+      if (runBtn) { runBtn.textContent = '🛡️ URUCHOM ANALIZĘ SENTINEL'; runBtn.onclick = runSentinel; }
+    }
   }
 
   // Auto-save Friday close snapshot at 21:00 UK
@@ -3193,6 +3199,9 @@ function applyWeekendMode() {
     btn.onclick = runMondayOutlook;
   }
 
+  // Restore previously generated Monday Outlook report
+  restoreMondayOutlook();
+
   // Show Friday snapshot on Dashboard sentinel card
   if (snap) {
     const ts = new Date(snap.ts);
@@ -3205,6 +3214,56 @@ function applyWeekendMode() {
   }
 
   renderWeekendAlerts();
+}
+
+function renderMondayOutlookHTML(data, ts) {
+  const tsStr = new Date(ts).toLocaleString('pl', {timeZone:'Europe/London', weekday:'long', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit'});
+  const instRows = Object.entries(data.instruments || {}).map(([sym, d]) => {
+    const col = d.outlook==='BULLISH'?'var(--green)':d.outlook==='BEARISH'?'var(--red)':'var(--amber)';
+    return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+      <span style="font-family:var(--mono);font-weight:700;font-size:11px;min-width:40px">${sym}</span>
+      <span style="font-family:var(--mono);font-size:9px;padding:2px 6px;border-radius:4px;background:${col}22;color:${col}">${d.outlook||'?'}</span>
+      <span style="font-size:9px;color:var(--t3)">Risk Mon: ${d.risk_monday||'?'}/10</span>
+      <span style="font-size:10px;color:var(--t2);flex:1">${d.note||''}</span>
+    </div>`;
+  }).join('');
+  return `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;padding:8px 12px;background:var(--card);border:1px solid var(--border);border-radius:8px">
+      <span style="font-size:10px;color:var(--t3);font-family:var(--mono)">Wygenerowano: ${tsStr}</span>
+      <button onclick="runMondayOutlook()" style="font-size:10px;font-family:var(--mono);padding:4px 10px;background:transparent;border:1px solid var(--cyan)44;color:var(--cyan);border-radius:5px;cursor:pointer">↻ Odśwież</button>
+    </div>
+    <div class="weekend-banner" style="margin-bottom:12px">
+      <div class="wb-hdr">
+        <span class="wb-ico">🌅</span>
+        <span class="wb-title">MONDAY OUTLOOK</span>
+      </div>
+      <div class="wb-body">${data.summary || ''}</div>
+    </div>
+    <div class="outlook-scenario scenario-bull">
+      <div class="scenario-title">📈 ${data.scenario_bull?.title || 'Bullish Scenario'}</div>
+      <div style="font-size:11px;color:var(--t2);line-height:1.6">${data.scenario_bull?.description || ''}</div>
+      <div style="font-size:10px;color:var(--green);margin-top:6px">🔑 ${data.scenario_bull?.key_catalyst || ''}</div>
+    </div>
+    <div class="outlook-scenario scenario-bear">
+      <div class="scenario-title">📉 ${data.scenario_bear?.title || 'Bearish Scenario'}</div>
+      <div style="font-size:11px;color:var(--t2);line-height:1.6">${data.scenario_bear?.description || ''}</div>
+      <div style="font-size:10px;color:var(--red);margin-top:6px">🔑 ${data.scenario_bear?.key_catalyst || ''}</div>
+    </div>
+    ${instRows}
+    <div style="padding:10px 0;font-size:11px;color:var(--t2);border-top:1px solid var(--border);margin-top:4px">
+      <strong style="color:var(--cyan)">💡 Rekomendacja:</strong> ${data.recommendation||''}
+    </div>`;
+}
+
+function restoreMondayOutlook() {
+  try {
+    const saved = JSON.parse(localStorage.getItem('monday_outlook_report'));
+    if (!saved?.data) return false;
+    const results = document.getElementById('sentinel-results');
+    if (!results) return false;
+    results.innerHTML = renderMondayOutlookHTML(saved.data, saved.ts);
+    return true;
+  } catch { return false; }
 }
 
 async function runMondayOutlook() {
@@ -3259,40 +3318,9 @@ Odpowiadaj TYLKO w formacie JSON:
   try {
     const raw = await callClaude(system, userMsg, 900);
     const data = JSON.parse(raw.replace(/```json|```/g, '').trim());
-
-    if (results) {
-      results.innerHTML = `
-        <div class="weekend-banner" style="margin-bottom:12px">
-          <div class="wb-hdr">
-            <span class="wb-ico">🌅</span>
-            <span class="wb-title">MONDAY OUTLOOK</span>
-            <span class="wb-ts">${new Date().toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'})}</span>
-          </div>
-          <div class="wb-body">${data.summary || ''}</div>
-        </div>
-        <div class="outlook-scenario scenario-bull">
-          <div class="scenario-title">📈 ${data.scenario_bull?.title || 'Bullish Scenario'}</div>
-          <div style="font-size:11px;color:var(--t2);line-height:1.6">${data.scenario_bull?.description || ''}</div>
-          <div style="font-size:10px;color:var(--green);margin-top:6px">🔑 ${data.scenario_bull?.key_catalyst || ''}</div>
-        </div>
-        <div class="outlook-scenario scenario-bear">
-          <div class="scenario-title">📉 ${data.scenario_bear?.title || 'Bearish Scenario'}</div>
-          <div style="font-size:11px;color:var(--t2);line-height:1.6">${data.scenario_bear?.description || ''}</div>
-          <div style="font-size:10px;color:var(--red);margin-top:6px">🔑 ${data.scenario_bear?.key_catalyst || ''}</div>
-        </div>
-        ${Object.entries(data.instruments || {}).map(([sym, d]) => {
-          const col = d.outlook==='BULLISH'?'var(--green)':d.outlook==='BEARISH'?'var(--red)':'var(--amber)';
-          return `<div style="display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
-            <span style="font-family:var(--mono);font-weight:700;font-size:11px;min-width:40px">${sym}</span>
-            <span style="font-family:var(--mono);font-size:9px;padding:2px 6px;border-radius:4px;background:${col}22;color:${col}">${d.outlook||'?'}</span>
-            <span style="font-size:9px;color:var(--t3)">Risk Mon: ${d.risk_monday||'?'}/10</span>
-            <span style="font-size:10px;color:var(--t2);flex:1">${d.note||''}</span>
-          </div>`;
-        }).join('')}
-        <div style="padding:10px 0;font-size:11px;color:var(--t2);border-top:1px solid var(--border);margin-top:4px">
-          <strong style="color:var(--cyan)">💡 Rekomendacja:</strong> ${data.recommendation||''}
-        </div>`;
-    }
+    const ts = Date.now();
+    localStorage.setItem('monday_outlook_report', JSON.stringify({data, ts}));
+    if (results) results.innerHTML = renderMondayOutlookHTML(data, ts);
     showNotif('🌅 Monday Outlook gotowy', {body: data.summary || 'Sprawdź zakładkę Sentinel'});
   } catch(e) {
     console.error('[MondayOutlook]', e);
@@ -3563,6 +3591,14 @@ loadNews();
 renderWatchlist();
 renderDashboardInstruments();
 scannerRefreshInstruments();
+// Clear Monday Outlook when market opens on Monday
+(function clearMondayOnStartup() {
+  const uk = new Date(new Date().toLocaleString('en-US', {timeZone:'Europe/London'}));
+  if (uk.getDay() === 1 && uk.getHours() >= 7) {
+    localStorage.removeItem('monday_outlook_report');
+    localStorage.removeItem('tj_weekend_alerts');
+  }
+})();
 restoreSentinel();
 if (isWeekendNow()) applyWeekendMode();
 renderReportsSection();
