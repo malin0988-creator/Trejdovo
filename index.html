@@ -1105,6 +1105,16 @@ body::before {
   </div>
 
   <div class="card" style="margin-bottom:10px">
+    <div class="setup-title">📅 FINNHUB API KEY</div>
+    <div class="setup-desc">Wymagany do działania kalendarza makro. Darmowy klucz: <a href="https://finnhub.io" target="_blank" style="color:var(--cyan)">finnhub.io</a> → Register → API key.</div>
+    <div class="form-grp">
+      <label class="form-lbl">Finnhub API Key</label>
+      <input class="f-input" type="password" id="finnhub-key-config" placeholder="d7ii32pr...">
+    </div>
+    <button class="btn-primary" onclick="saveFinnhubKey()">ZAPISZ KLUCZ FINNHUB</button>
+  </div>
+
+  <div class="card" style="margin-bottom:10px">
     <div class="card-hdr" style="margin-bottom:8px"><span class="card-label">🎯 Moja strategia tradingowa</span></div>
     <div style="font-size:11px;color:var(--t3);margin-bottom:10px;line-height:1.6">Scanner AI używa tej opisu do oceny czy setup na wykresie pasuje do Twojego podejścia.</div>
     <div class="form-grp">
@@ -1511,67 +1521,54 @@ async function loadCalendar() {
   const nextMonLabel = nextMonDate.toLocaleDateString('pl', {timeZone:'Europe/London', weekday:'long', day:'numeric', month:'long'});
 
   try {
-    // Forex Factory kept as last-resort fallback only; primary source is Finnhub via Worker
-    const BASE_THIS = 'https://nfs.faireconomy.media/ff_calendar_thisweek.json';
-    const BASE_NEXT = 'https://nfs.faireconomy.media/ff_calendar_nextweek.json';
-    const CALENDAR_WORKER_URL = 'https://trejdovo-calendar.malin0988.workers.dev';
-
-    async function fetchCalFeed(baseUrl, weekParam) {
-      // Worker URL: simple query param, no path — works with both old and new Worker versions
-      const workerUrl = CALENDAR_WORKER_URL
-        ? CALENDAR_WORKER_URL + '?week=' + (weekParam || 'this') + '&t=' + Date.now()
-        : null;
-      const urls = [
-        ...(workerUrl ? [workerUrl] : []),
-        'https://api.allorigins.win/raw?url=' + encodeURIComponent(baseUrl + '?t=' + Date.now()),
-        'https://corsproxy.io/?' + encodeURIComponent(baseUrl + '?t=' + Date.now()),
-        'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(baseUrl),
-        baseUrl + '?t=' + Date.now(),
-      ];
-      for (const url of urls) {
-        try {
-          const ctrl = new AbortController();
-          const timer = setTimeout(() => ctrl.abort(), 20000);
-          const resp = await fetch(url, {signal: ctrl.signal});
-          clearTimeout(timer);
-          if (!resp.ok) throw new Error('HTTP ' + resp.status);
-          const text = await resp.text();
-          console.log('[Calendar] raw response from', url, '— first 200 chars:', text.substring(0, 200));
-          const parsed = JSON.parse(text);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            console.log('[Calendar] SUCCESS', parsed.length, 'events from', url);
-            return parsed;
-          }
-          console.warn('[Calendar] response was not a non-empty array from', url, '— got:', typeof parsed, Array.isArray(parsed) ? 'length='+parsed.length : '');
-        } catch(e) { console.error('[Calendar] failed:', url, '—', e.name, e.message); }
-      }
-      return null;
+    // Finnhub supports CORS — call directly from browser, no Worker needed.
+    function isoDate(d) {
+      return [d.getFullYear(), String(d.getMonth()+1).padStart(2,'0'), String(d.getDate()).padStart(2,'0')].join('-');
+    }
+    function weekBounds(offsetWeeks) {
+      const now = new Date();
+      const daysSinceMon = (now.getDay() + 6) % 7;
+      const mon = new Date(now); mon.setDate(now.getDate() - daysSinceMon + offsetWeeks * 7);
+      const sun = new Date(mon); sun.setDate(mon.getDate() + 6);
+      return { from: isoDate(mon), to: isoDate(sun) };
     }
 
-    let all = await fetchCalFeed(BASE_THIS, 'this');
-    if (!all) throw new Error('calendar_unavailable');
+    async function fetchFinnhub(offsetWeeks) {
+      if (!FINNHUB_API_KEY) throw new Error('Brak klucza Finnhub — skonfiguruj go w Config.');
+      const { from, to } = weekBounds(offsetWeeks);
+      const url = `https://finnhub.io/api/v1/calendar/economic?from=${from}&to=${to}&token=${FINNHUB_API_KEY}`;
+      console.log('[Calendar] fetching Finnhub', url.replace(FINNHUB_API_KEY, '***'));
+      const ctrl = new AbortController();
+      const timer = setTimeout(() => ctrl.abort(), 20000);
+      const resp = await fetch(url, {signal: ctrl.signal});
+      clearTimeout(timer);
+      if (!resp.ok) throw new Error('Finnhub HTTP ' + resp.status);
+      const data = await resp.json();
+      const arr = data?.economicCalendar ?? data ?? [];
+      console.log('[Calendar] Finnhub returned', arr.length, 'events, sample:', arr[0]);
+      return Array.isArray(arr) ? arr : [];
+    }
 
     // Normalise Finnhub fields → app's internal format so all render code stays unchanged.
-    // Finnhub: { event, time, impact(lowercase), estimate, actual, country }
-    // App expects: { title, date, impact(Title case), forecast, actual, country }
     function normalise(e) {
       return {
         title:    e.event    || e.title    || '',
-        date:     (e.time    || e.date     || '').replace(' ', 'T'), // "YYYY-MM-DD HH:MM:SS" → ISO
-        impact:   e.impact   ? e.impact.charAt(0).toUpperCase() + e.impact.slice(1) : (e.impact || ''),
+        date:     (e.time    || e.date     || '').replace(' ', 'T'),
+        impact:   e.impact   ? e.impact.charAt(0).toUpperCase() + e.impact.slice(1) : '',
         forecast: e.estimate || e.forecast || '',
         actual:   e.actual   || '',
         country:  e.country  || '',
       };
     }
-    all = all.map(normalise);
-    console.log('[Calendar] normalised thisweek sample:', all.slice(0, 2));
+
+    let all = (await fetchFinnhub(0)).map(normalise);
+    if (!all.length) throw new Error('calendar_unavailable');
 
     // On weekends also fetch next week so Monday events are available
     if (isWeekend) {
-      const nextWeek = await fetchCalFeed(BASE_NEXT, 'next');
-      if (nextWeek) {
-        all = [...all, ...nextWeek.map(normalise)];
+      const nextWeek = (await fetchFinnhub(1).catch(() => [])).map(normalise);
+      if (nextWeek.length) {
+        all = [...all, ...nextWeek];
         console.log('[Calendar] combined total:', all.length);
       } else {
         console.warn('[Calendar] nextweek feed unavailable — Monday events may be missing');
@@ -1777,6 +1774,17 @@ function switchTo(id) {
 
 // ─── API KEY ───
 let ANTHROPIC_API_KEY = localStorage.getItem('anthropic_api_key') || '';
+let FINNHUB_API_KEY   = localStorage.getItem('finnhub_api_key')   || 'd7ii32pr01qn2qau4770d7ii32pr01qn2qau477g';
+
+function saveFinnhubKey() {
+  const inp = document.getElementById('finnhub-key-config');
+  const v = inp?.value.trim() || '';
+  if (v.length < 8) { alert('Wklej klucz Finnhub w pole powyżej.'); return; }
+  FINNHUB_API_KEY = v;
+  localStorage.setItem('finnhub_api_key', v);
+  if (inp) { inp.value = ''; inp.placeholder = '••••••••• (zapisany)'; }
+  alert('✓ Klucz Finnhub zapisany!');
+}
 
 function saveApiKey() {
   // Try both inputs
@@ -1821,6 +1829,8 @@ try {
     var cfgEl = document.getElementById('api-key-config');
     if (cfgEl) cfgEl.placeholder = '••••••••••••• (zapisany)';
   }
+  const fhEl = document.getElementById('finnhub-key-config');
+  if (fhEl && localStorage.getItem('finnhub_api_key')) fhEl.placeholder = '••••••••• (zapisany)';
 } catch(e) { console.log('Init check:', e); }
 
 // ─── CLAUDE API CALL ───
