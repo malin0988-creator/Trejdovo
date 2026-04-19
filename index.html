@@ -1064,6 +1064,10 @@ body::before {
 
   <div id="journal-trades"></div>
 
+  <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border)">
+    <button onclick="resetJournalData()" style="width:100%;background:transparent;border:1px solid var(--red);color:var(--red);border-radius:8px;padding:9px;font-size:11px;font-family:var(--mono);font-weight:700;letter-spacing:0.5px;cursor:pointer">🗑 WYCZYŚĆ WSZYSTKIE TRADE'Y</button>
+  </div>
+
 </section>
 
 <!-- ══════════ WATCHLIST ══════════ -->
@@ -2470,6 +2474,12 @@ function loadJournalTrades() {
     </div>` : ''}
   </div>`;
   }).join('');
+}
+
+function resetJournalData() {
+  if (!confirm("Czy na pewno chcesz usunąć wszystkie trade'y?\nTej operacji nie można cofnąć.")) return;
+  localStorage.removeItem('tj_trades');
+  loadJournalTrades();
 }
 
 // ─── PUSH NOTIFICATIONS ───
