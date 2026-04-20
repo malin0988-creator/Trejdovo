@@ -1198,6 +1198,16 @@ body::before {
   </div>
 
   <div class="card" style="margin-bottom:10px">
+    <div class="setup-title">🔍 PERPLEXITY API KEY</div>
+    <div class="setup-desc">Opcjonalny. Dodaje real-time web search do Sentinela i raportów — AI dostaje najnowsze newsy rynkowe przed każdą analizą. Klucz: <a href="https://www.perplexity.ai/settings/api" target="_blank" style="color:var(--cyan)">perplexity.ai/settings/api</a></div>
+    <div class="form-grp">
+      <label class="form-lbl">Perplexity API Key</label>
+      <input class="f-input" type="password" id="perplexity-key-config" placeholder="pplx-...">
+    </div>
+    <button class="btn-primary" onclick="savePerplexityKey()">ZAPISZ KLUCZ PERPLEXITY</button>
+  </div>
+
+  <div class="card" style="margin-bottom:10px">
     <div class="setup-title">📅 FINNHUB API KEY</div>
     <div class="setup-desc">Wymagany do działania kalendarza makro. Darmowy klucz: <a href="https://finnhub.io" target="_blank" style="color:var(--cyan)">finnhub.io</a> → Register → API key.</div>
     <div class="form-grp">
@@ -1800,6 +1810,31 @@ async function loadCalendar() {
 }
 
 // ─── DYNAMIC TODAY CONTEXT ───
+// Real-time web search via Perplexity sonar model. Returns content string or ''.
+async function fetchPerplexityNews(instruments) {
+  if (!PERPLEXITY_API_KEY) return '';
+  const syms = (instruments || getWatchlist().map(x => x.sym)).join(', ') || 'major forex, gold, indices';
+  const query = `Latest market news today for ${syms}: geopolitical events, central bank decisions, key economic data releases, any major risk events. Be concise, focus on price-moving news only.`;
+  try {
+    const resp = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: 'sonar',
+        messages: [{ role: 'user', content: query }],
+        max_tokens: 400,
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!resp.ok) return '';
+    const data = await resp.json();
+    return data?.choices?.[0]?.message?.content?.trim() || '';
+  } catch { return ''; }
+}
+
 // Fetch headlines from Reuters, BBC Business, and Yahoo Finance in parallel.
 // Returns array of "[Source] Headline" strings; silently drops any failing source.
 async function fetchRssHeadlines() {
@@ -1823,7 +1858,7 @@ async function fetchRssHeadlines() {
   return lines;
 }
 
-function buildTodayContext(newsLines) {
+function buildTodayContext(newsLines, perplexityNews) {
   const now = new Date();
   const dateStr = now.toLocaleDateString('pl', {timeZone:'Europe/London', weekday:'long', year:'numeric', month:'long', day:'numeric'});
   const timeStr = now.toLocaleTimeString('pl', {timeZone:'Europe/London'});
@@ -1844,11 +1879,15 @@ function buildTodayContext(newsLines) {
     ? newsLines.map(l => `- ${l}`).join('\n')
     : '- [brak danych — trader dodaje ręcznie w zakładce Newsy]';
 
+  const perplexityStr = perplexityNews
+    ? `\nPERPLEXITY AI — REAL-TIME SEARCH:\n${perplexityNews}\n`
+    : '';
+
   return `DATA: ${dateStr}, godzina UK: ${timeStr}
 
 NEWSY (Reuters / BBC Business / Yahoo Finance):
 ${newsStr}
-
+${perplexityStr}
 KALENDARZ MAKRO DZIŚ:
 ${calStr}`;
 }
@@ -1903,8 +1942,19 @@ function switchTo(id) {
 }
 
 // ─── API KEY ───
-let ANTHROPIC_API_KEY = localStorage.getItem('anthropic_api_key') || '';
-let FINNHUB_API_KEY   = localStorage.getItem('finnhub_api_key')   || 'd7ii32pr01qn2qau4770d7ii32pr01qn2qau477g';
+let ANTHROPIC_API_KEY  = localStorage.getItem('anthropic_api_key')  || '';
+let FINNHUB_API_KEY    = localStorage.getItem('finnhub_api_key')    || 'd7ii32pr01qn2qau4770d7ii32pr01qn2qau477g';
+let PERPLEXITY_API_KEY = localStorage.getItem('perplexity_api_key') || '';
+
+function savePerplexityKey() {
+  const inp = document.getElementById('perplexity-key-config');
+  const v = inp?.value.trim() || '';
+  if (v.length < 8) { alert('Wklej klucz Perplexity w pole powyżej.'); return; }
+  PERPLEXITY_API_KEY = v;
+  localStorage.setItem('perplexity_api_key', v);
+  if (inp) { inp.value = ''; inp.placeholder = '••••••••• (zapisany)'; }
+  alert('✓ Klucz Perplexity zapisany! Real-time search aktywny.');
+}
 
 function saveFinnhubKey() {
   const inp = document.getElementById('finnhub-key-config');
@@ -1961,6 +2011,8 @@ try {
   }
   const fhEl = document.getElementById('finnhub-key-config');
   if (fhEl && localStorage.getItem('finnhub_api_key')) fhEl.placeholder = '••••••••• (zapisany)';
+  const pxEl = document.getElementById('perplexity-key-config');
+  if (pxEl && localStorage.getItem('perplexity_api_key')) pxEl.placeholder = '••••••••• (zapisany)';
 } catch(e) { console.log('Init check:', e); }
 
 // ─── CLAUDE API CALL ───
@@ -2046,9 +2098,9 @@ async function runSentinel() {
 
   try {
     btn.textContent = 'Pobieram newsy...';
-    const newsLines = await fetchRssHeadlines();
+    const [newsLines, perplexityNews] = await Promise.all([fetchRssHeadlines(), fetchPerplexityNews()]);
     btn.textContent = 'Analizuję...';
-    const raw = await callClaude(buildSentinelSystem(), buildTodayContext(newsLines), 1200);
+    const raw = await callClaude(buildSentinelSystem(), buildTodayContext(newsLines, perplexityNews), 1200);
     const clean = raw.replace(/```json|```/g, '').trim();
     const data = JSON.parse(clean);
     lastSentinelResult = data;
@@ -2385,10 +2437,12 @@ async function generateReport(slotId) {
   const loadEl   = document.getElementById('rpt-loading-' + slotId);
   const blockEl  = document.getElementById('rpt-block-'   + slotId);
   const btn      = blockEl?.querySelector('button[onclick^="generateReport"]');
-  if (btn) { btn.disabled = true; btn.textContent = 'Generuję…'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Pobieram newsy…'; }
   if (loadEl) loadEl.style.display = 'block';
   try {
-    const raw   = await callClaude(buildReportSystem(), buildTodayContext() + '\n\n' + slot.ctx, 1000);
+    const [newsLines, perplexityNews] = await Promise.all([fetchRssHeadlines(), fetchPerplexityNews()]);
+    if (btn) btn.textContent = 'Generuję…';
+    const raw   = await callClaude(buildReportSystem(), buildTodayContext(newsLines, perplexityNews) + '\n\n' + slot.ctx, 1000);
     const clean = raw.replace(/```json|```/g,'').trim();
     const data  = JSON.parse(clean);
     saveStoredReport(slotId, data);
@@ -3322,12 +3376,13 @@ async function runMondayOutlook() {
       `\nOverall: ${snap.data?.overall || '?'} — ${snap.data?.overall_reason || ''}`
     : 'Brak danych Sentinel — analizuj wyłącznie na podstawie newsów weekendowych.';
 
-  // Fetch weekend news from Reuters, BBC Business, Yahoo Finance
+  // Fetch weekend news from Reuters, BBC Business, Yahoo Finance + Perplexity
   btn.textContent = 'Pobieram newsy weekendowe...';
-  const weekendNewsLines = await fetchRssHeadlines();
-  const newsHeadlines = weekendNewsLines.length
-    ? weekendNewsLines.map(l => `- ${l}`).join('\n')
-    : 'Nie udało się pobrać newsów weekendowych.';
+  const [weekendNewsLines, perplexityWeekend] = await Promise.all([fetchRssHeadlines(), fetchPerplexityNews()]);
+  const newsHeadlines = [
+    ...weekendNewsLines.map(l => `- ${l}`),
+    ...(perplexityWeekend ? [`\n[Perplexity AI — real-time]:\n${perplexityWeekend}`] : []),
+  ].join('\n') || 'Nie udało się pobrać newsów weekendowych.';
 
   const system = `Jesteś ekspertem analizy rynków finansowych. Na podstawie Friday Close i newsów weekendowych wygeneruj Monday Outlook.
 Odpowiadaj TYLKO w formacie JSON:
