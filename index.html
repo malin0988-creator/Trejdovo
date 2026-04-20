@@ -1800,7 +1800,30 @@ async function loadCalendar() {
 }
 
 // ─── DYNAMIC TODAY CONTEXT ───
-function buildTodayContext() {
+// Fetch headlines from Reuters, BBC Business, and Yahoo Finance in parallel.
+// Returns array of "[Source] Headline" strings; silently drops any failing source.
+async function fetchRssHeadlines() {
+  const sources = [
+    { url: 'https://feeds.reuters.com/reuters/businessNews',                                                         label: 'Reuters'       },
+    { url: 'https://feeds.bbci.co.uk/news/business/rss.xml',                                                        label: 'BBC Business'  },
+    { url: 'https://feeds.finance.yahoo.com/rss/2.0/headline?s=SPY,QQQ,GC=F,CL=F,BTC-USD&region=US&lang=en-US&count=20', label: 'Yahoo Finance' },
+  ];
+  const proxy = u => 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u);
+  const lines = [];
+  await Promise.allSettled(sources.map(async src => {
+    try {
+      const resp = await fetch(proxy(src.url), {signal: AbortSignal.timeout(10000)});
+      const xml  = await resp.text();
+      let titles = [...xml.matchAll(/<title><!\[CDATA\[(.+?)\]\]><\/title>/g)].map(m => m[1]);
+      if (!titles.length)
+        titles = [...xml.matchAll(/<title>([^<]{10,})<\/title>/g)].map(m => m[1].trim()).slice(1);
+      titles.slice(0, 8).forEach(t => lines.push(`[${src.label}] ${t}`));
+    } catch {}
+  }));
+  return lines;
+}
+
+function buildTodayContext(newsLines) {
   const now = new Date();
   const dateStr = now.toLocaleDateString('pl', {timeZone:'Europe/London', weekday:'long', year:'numeric', month:'long', day:'numeric'});
   const timeStr = now.toLocaleTimeString('pl', {timeZone:'Europe/London'});
@@ -1817,10 +1840,14 @@ function buildTodayContext() {
       }).join('\n')
     : '- Brak danych z kalendarza makro na dziś';
 
+  const newsStr = newsLines?.length
+    ? newsLines.map(l => `- ${l}`).join('\n')
+    : '- [brak danych — trader dodaje ręcznie w zakładce Newsy]';
+
   return `DATA: ${dateStr}, godzina UK: ${timeStr}
 
-NEWSY Z FINANCIAL JUICE (dziś):
-[Brak automatycznego feedu — trader dodaje ręcznie w zakładce Newsy]
+NEWSY (Reuters / BBC Business / Yahoo Finance):
+${newsStr}
 
 KALENDARZ MAKRO DZIŚ:
 ${calStr}`;
@@ -2018,7 +2045,10 @@ async function runSentinel() {
   results.innerHTML = '';
 
   try {
-    const raw = await callClaude(buildSentinelSystem(), buildTodayContext(), 1200);
+    btn.textContent = 'Pobieram newsy...';
+    const newsLines = await fetchRssHeadlines();
+    btn.textContent = 'Analizuję...';
+    const raw = await callClaude(buildSentinelSystem(), buildTodayContext(newsLines), 1200);
     const clean = raw.replace(/```json|```/g, '').trim();
     const data = JSON.parse(clean);
     lastSentinelResult = data;
@@ -3292,16 +3322,12 @@ async function runMondayOutlook() {
       `\nOverall: ${snap.data?.overall || '?'} — ${snap.data?.overall_reason || ''}`
     : 'Brak danych Sentinel — analizuj wyłącznie na podstawie newsów weekendowych.';
 
-  // Fetch weekend news headlines
-  let newsHeadlines = '';
-  try {
-    const rssUrl = 'https://feeds.finance.yahoo.com/rss/2.0/headline?s=SPY,QQQ,GC=F,CL=F,BTC-USD&region=US&lang=en-US&count=30';
-    const proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(rssUrl);
-    const resp = await fetch(proxy, {signal: AbortSignal.timeout(10000)});
-    const xml = await resp.text();
-    const titles = [...xml.matchAll(/<title><!\[CDATA\[(.+?)\]\]><\/title>/g)].map(m => m[1]).slice(1, 15);
-    newsHeadlines = titles.length ? titles.map(t => '- ' + t).join('\n') : 'Brak newsów.';
-  } catch { newsHeadlines = 'Nie udało się pobrać newsów weekendowych.'; }
+  // Fetch weekend news from Reuters, BBC Business, Yahoo Finance
+  btn.textContent = 'Pobieram newsy weekendowe...';
+  const weekendNewsLines = await fetchRssHeadlines();
+  const newsHeadlines = weekendNewsLines.length
+    ? weekendNewsLines.map(l => `- ${l}`).join('\n')
+    : 'Nie udało się pobrać newsów weekendowych.';
 
   const system = `Jesteś ekspertem analizy rynków finansowych. Na podstawie Friday Close i newsów weekendowych wygeneruj Monday Outlook.
 Odpowiadaj TYLKO w formacie JSON:
