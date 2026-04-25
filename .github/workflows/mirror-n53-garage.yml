@@ -1,0 +1,46 @@
+name: Mirror n53-garage → standalone repo
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Wpisz "tak" żeby potwierdzić push do N53-garage'
+        required: true
+        default: 'tak'
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout n53-garage-export branch
+        uses: actions/checkout@v4
+        with:
+          ref: n53-garage-export
+
+      - name: Configure git
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+      - name: Push n53-garage subfolder as standalone repo
+        env:
+          N53_TOKEN: ${{ secrets.N53_GARAGE_TOKEN }}
+        run: |
+          # Sklonuj docelowe repo (puste)
+          git clone https://x-access-token:${N53_TOKEN}@github.com/malin0988-creator/N53-garage.git /tmp/n53-target
+
+          # Skopiuj tylko zawartość podfolderu n53-garage/
+          cp -r n53-garage/. /tmp/n53-target/
+
+          # Zainicjuj commit w docelowym repo
+          cd /tmp/n53-target
+          git add .
+          git commit -m "feat: initial commit — N53 Garage React+Vite PWA scaffold
+
+          Migrated from Trejdovo/n53-garage-export branch.
+          React 18 + Vite 5 + vite-plugin-pwa, dark theme, Orbitron font."
+
+          git push origin main
+
+      - name: Done
+        run: echo "✅ N53-garage został zasilony kodem. Sprawdź https://github.com/malin0988-creator/N53-garage"
