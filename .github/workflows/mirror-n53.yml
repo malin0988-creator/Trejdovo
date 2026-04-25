@@ -1,0 +1,59 @@
+name: Mirror n53-garage to standalone repo
+
+on:
+  workflow_dispatch:
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout n53-garage-export branch
+        uses: actions/checkout@v4
+        with:
+          ref: n53-garage-export
+          fetch-depth: 1
+
+      - name: Configure git identity
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+      - name: Clone target repo (N53-garage)
+        env:
+          N53_GARAGE_TOKEN: ${{ secrets.N53_GARAGE_TOKEN }}
+        run: |
+          git clone \
+            https://x-access-token:${N53_GARAGE_TOKEN}@github.com/malin0988-creator/N53-garage.git \
+            /tmp/n53-target
+
+      - name: Copy files from n53-garage subfolder
+        run: |
+          # Copy everything inside n53-garage/ into the root of the target repo
+          cp -r n53-garage/. /tmp/n53-target/
+
+      - name: Commit and push to N53-garage main
+        env:
+          N53_GARAGE_TOKEN: ${{ secrets.N53_GARAGE_TOKEN }}
+        run: |
+          cd /tmp/n53-target
+
+          git add .
+
+          # Only commit if there is something to commit
+          if git diff --cached --quiet; then
+            echo "Nothing to commit — N53-garage is already up to date."
+          else
+            git commit -m "feat: initial commit — N53 Garage React+Vite PWA scaffold
+
+          Migrated from malin0988-creator/Trejdovo branch n53-garage-export.
+          Stack: React 18 + Vite 5 + vite-plugin-pwa, dark theme, Orbitron font."
+
+            git push \
+              https://x-access-token:${N53_GARAGE_TOKEN}@github.com/malin0988-creator/N53-garage.git \
+              main
+          fi
+
+      - name: Summary
+        run: |
+          echo "Done. Check https://github.com/malin0988-creator/N53-garage"
