@@ -810,11 +810,17 @@ body::before {
   .shell { border-left:1px solid var(--border); border-right:1px solid var(--border); }
 }
 
-/* ─── TABLET (768px–1023px) — 2-column instrument grid ─── */
-@media (min-width:768px) and (max-width:1023px) {
+/* ─── TABLET (768px–1024px) — expand shell + 2-column instrument grid ─── */
+@media (min-width:768px) and (max-width:1024px) {
+  .shell {
+    max-width: 100%;
+    border-left: none;
+    border-right: none;
+  }
+  .content { padding: 16px 24px; }
   #dashboard-inst-list {
     display: grid;
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     padding: 0;
     overflow: hidden;
   }
@@ -832,8 +838,8 @@ body::before {
   }
 }
 
-/* ─── DESKTOP (≥1024px) ─── */
-@media (min-width:1024px) {
+/* ─── DESKTOP (≥1025px) ─── */
+@media (min-width:1025px) {
   /* Expand to fill the browser window */
   .shell {
     max-width: 100%;
@@ -1830,6 +1836,8 @@ async function loadCalendar() {
         const miss = !isNaN(fNum) && !isNaN(aNum) && aNum < fNum;
         const cls  = beat ? 'cv-actual cv-beat' : miss ? 'cv-actual cv-miss' : 'cv-actual';
         vals += `<span class="${cls}">${beat?'✓':miss?'✗':''} Actual: ${e.actual}</span>`;
+      } else if (isPast) {
+        vals += `<span style="color:var(--t3);font-style:italic">Opublikowano</span>`;
       } else {
         vals += `<span style="color:var(--t3)">Oczekuje...</span>`;
         if (isHigh) vals += `<span class="badge b-warn" style="margin-left:4px">HIGH</span>`;
@@ -2184,7 +2192,14 @@ async function fetchCurrentPrices() {
     try {
       const {price, changePct} = await fetchFinnhubPrice(item);
       prices[item.sym] = {price, pct: changePct.toFixed(2)};
-    } catch {}
+    } catch {
+      // Fall back to last-known price from localStorage so analysis prompts always have data
+      const last = wlGetLastPrice(item.sym);
+      if (last) {
+        prices[item.sym] = {price: last.price, pct: Number(last.changePct || 0).toFixed(2)};
+        console.log(`[Prices] ${item.sym}: live fetch failed, using cached ${last.price}`);
+      }
+    }
   }));
   _cachedPrices = prices;
   return prices;
@@ -3363,6 +3378,14 @@ function renderWatchlist() {
 
 async function fetchFinnhubPrice(item) {
   const sym = typeof item === 'string' ? item : item.sym;
+  if (!FINNHUB_API_KEY) { console.warn('[Finnhub] API key not set'); throw new Error('No Finnhub key'); }
+
+  function extractPrice(d) {
+    // c = current; fall back to pc (previous close) when market is closed
+    if (d?.c && d.c !== 0) return d.c;
+    if (d?.pc && d.pc !== 0) return d.pc;
+    return 0;
+  }
 
   // Use cached working symbol if available
   if (_resolvedFhSyms[sym]) {
@@ -3371,30 +3394,33 @@ async function fetchFinnhubPrice(item) {
       const resp = await fetch(url, {signal: AbortSignal.timeout(6000)});
       if (resp.ok) {
         const d = await resp.json();
-        if (d?.c && d.c !== 0) {
-          return {price: d.c, changePct: d.pc ? ((d.c - d.pc) / d.pc * 100) : 0};
-        }
+        const price = extractPrice(d);
+        if (price) return {price, changePct: d.pc ? ((price - d.pc) / d.pc * 100) : 0};
       }
-    } catch {}
-    delete _resolvedFhSyms[sym]; // cached sym stopped working, retry fallbacks
+    } catch(e) { console.warn(`[Finnhub] cached ${_resolvedFhSyms[sym]} failed:`, e.message); }
+    delete _resolvedFhSyms[sym];
   }
 
   // Try candidates in order
   const candidates = FINNHUB_SYM_FALLBACKS[sym] || (
     CRYPTO_SYMS.has(sym) ? [`BINANCE:${sym}USDT`] :
-    [`OANDA:${sym.replace('/',  '_')}`]
+    [`OANDA:${sym.replace('/', '_')}`]
   );
+  console.log(`[Finnhub] ${sym}: trying`, candidates);
   for (const candidate of candidates) {
     try {
       const url  = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(candidate)}&token=${FINNHUB_API_KEY}`;
       const resp = await fetch(url, {signal: AbortSignal.timeout(6000)});
-      if (!resp.ok) continue;
+      if (!resp.ok) { console.warn(`[Finnhub] ${candidate}: HTTP ${resp.status}`); continue; }
       const d = await resp.json();
-      if (!d?.c || d.c === 0) continue;
+      const price = extractPrice(d);
+      if (!price) { console.warn(`[Finnhub] ${candidate}: no price (c=${d?.c}, pc=${d?.pc})`); continue; }
+      console.log(`[Finnhub] ${sym} → ${candidate}: ${price}`);
       _resolvedFhSyms[sym] = candidate;
-      return {price: d.c, changePct: d.pc ? ((d.c - d.pc) / d.pc * 100) : 0};
-    } catch {}
+      return {price, changePct: d.pc ? ((price - d.pc) / d.pc * 100) : 0};
+    } catch(e) { console.warn(`[Finnhub] ${candidate}: ${e.message}`); }
   }
+  console.error(`[Finnhub] All candidates failed for ${sym}:`, candidates);
   throw new Error(`No valid Finnhub data for ${sym}`);
 }
 
