@@ -1867,10 +1867,19 @@ async function fetchRssHeadlines() {
   return lines;
 }
 
-function buildTodayContext(newsLines, perplexityNews) {
+function buildTodayContext(newsLines, perplexityNews, prices) {
   const now = new Date();
   const dateStr = now.toLocaleDateString('pl', {timeZone:'Europe/London', weekday:'long', year:'numeric', month:'long', day:'numeric'});
   const timeStr = now.toLocaleTimeString('pl', {timeZone:'Europe/London'});
+
+  // Prices: use explicit param first, then module cache
+  const pData = (prices && Object.keys(prices).length) ? prices : _cachedPrices;
+  const priceSection = Object.keys(pData).length
+    ? `⚠️ AKTUALNE CENY RYNKOWE — UŻYWAJ WYŁĄCZNIE TYCH WARTOŚCI. NIE WYMYŚLAJ CEN:\n` +
+      Object.entries(pData).map(([s, d]) =>
+        `  ${s}: ${d.price} (${Number(d.pct) >= 0 ? '+' : ''}${d.pct}% dzisiaj)`
+      ).join('\n')
+    : `⚠️ CENY RYNKOWE: Brak danych z Finnhub — NIE PODAWAJ żadnych konkretnych cen w analizie.`;
 
   let calStr = calendarData.length
     ? calendarData.map(e => {
@@ -1893,6 +1902,8 @@ function buildTodayContext(newsLines, perplexityNews) {
     : '';
 
   return `DATA: ${dateStr}, godzina UK: ${timeStr}
+
+${priceSection}
 
 NEWSY (Reuters / BBC Business / Yahoo Finance):
 ${newsStr}
@@ -2072,6 +2083,7 @@ async function callClaude(systemPrompt, userMsg, maxTokens = 1200, model = 'clau
 // ─── VALIDATOR AGENT ───
 let _validatorNewsLines    = [];
 let _validatorPerplexity   = '';
+let _cachedPrices          = {};   // populated before every analysis call
 
 async function fetchCurrentPrices() {
   const prices = {};
@@ -2083,30 +2095,32 @@ async function fetchCurrentPrices() {
       if (d?.c) prices[item.sym] = {price: d.c, pct: (((d.c - d.pc) / d.pc) * 100).toFixed(2)};
     } catch {}
   }));
+  _cachedPrices = prices;   // cache for use throughout the session
   return prices;
 }
 
 async function runValidatorAgent(analysisData) {
   if (!ANTHROPIC_API_KEY) return null;
   try {
-    const prices    = await fetchCurrentPrices();
-    const priceStr  = Object.entries(prices).length
-      ? Object.entries(prices).map(([s, d]) => `${s}: ${d.price} (${d.pct > 0 ? '+' : ''}${d.pct}%)`).join(', ')
+    // Reuse already-cached prices — no extra Finnhub fetch needed
+    const prices   = Object.keys(_cachedPrices).length ? _cachedPrices : await fetchCurrentPrices();
+    const priceStr = Object.keys(prices).length
+      ? Object.entries(prices).map(([s, d]) => `${s}: ${d.price} (${Number(d.pct) >= 0 ? '+' : ''}${d.pct}%)`).join('\n')
       : 'Brak danych cenowych';
     const newsCtx = [
       ..._validatorNewsLines.slice(0, 15),
       ...(_validatorPerplexity ? [`[Perplexity]: ${_validatorPerplexity.substring(0, 600)}`] : []),
     ].join('\n') || 'Brak zweryfikowanych newsów';
 
-    const system = `Jesteś agentem weryfikacji analizy rynkowej. Sprawdzasz:
-1. Czy ceny/wartości podane w analizie są realistyczne względem aktualnych cen (tolerancja ±5%).
-2. Czy cytowane wydarzenia i zapalniki mają odzwierciedlenie w zweryfikowanych newsach.
+    const system = `Jesteś agentem weryfikacji analizy rynkowej. Sprawdzasz KRYTYCZNIE:
+1. CENY: Każda konkretna cena wymieniona w analizie musi mieścić się w tolerancji ±5% od aktualnych cen. Jeśli cena w analizie różni się >5% od rzeczywistej — to BŁĄD KRYTYCZNY. Obniż confidence do maksymalnie 3.
+2. NEWSY: Cytowane wydarzenia i zapalniki muszą mieć potwierdzenie w zweryfikowanych newsach.
 Odpowiadaj WYŁĄCZNIE w formacie JSON. Nie dodawaj żadnego tekstu poza JSON.`;
 
     const user = `ANALIZA DO WERYFIKACJI:
 ${JSON.stringify(analysisData, null, 2).substring(0, 2500)}
 
-AKTUALNE CENY RYNKOWE:
+AKTUALNE CENY RYNKOWE (prawdziwe, z Finnhub):
 ${priceStr}
 
 ZWERYFIKOWANE NEWSY (RSS + Perplexity):
@@ -2116,11 +2130,11 @@ Zwróć JSON:
 {
   "confidence": <1-10>,
   "instruments_verified": { "<SYM>": <true|false>, ... },
-  "unverified_claims": ["<opis twierdzenia, które nie ma potwierdzenia>"],
+  "unverified_claims": ["<opis błędu — np. 'CL: analiza podaje $68 ale aktualna cena to $93'>"],
   "summary": "<jedno zdanie po polsku o jakości analizy>"
 }`;
 
-    const raw = await callClaude(system, user, 350);
+    const raw = await callClaude(system, user, 400);
     return JSON.parse(raw.replace(/```json|```/g, '').trim());
   } catch(e) {
     console.warn('[Validator]', e);
@@ -2184,7 +2198,9 @@ ${instJson}
   },
   "plan_dnia": ["krok 1 (max 1 zdanie)", "krok 2", "krok 3"],
   "setup_alert": "null lub opis potencjalnego setupu"
-}`;
+}
+
+KRYTYCZNE: W polach "reason", "zapalnik" i "plan_dnia" UŻYWAJ WYŁĄCZNIE cen z sekcji "AKTUALNE CENY RYNKOWE" w kontekście. NIE WYMYŚLAJ, NIE SZACUJ i NIE UŻYWAJ cen ze swojego treningu. Jeśli brak danych cenowych, nie podawaj żadnych konkretnych poziomów.`;
 }
 
 
@@ -2199,12 +2215,14 @@ async function runSentinel() {
   results.innerHTML = '';
 
   try {
-    btn.textContent = 'Pobieram newsy...';
-    const [newsLines, perplexityNews] = await Promise.all([fetchRssHeadlines(), fetchPerplexityNews()]);
+    btn.textContent = 'Pobieram dane rynkowe...';
+    const [newsLines, perplexityNews, prices] = await Promise.all([
+      fetchRssHeadlines(), fetchPerplexityNews(), fetchCurrentPrices(),
+    ]);
     _validatorNewsLines  = newsLines;
     _validatorPerplexity = perplexityNews;
     btn.textContent = 'Analizuję...';
-    const raw = await callClaude(buildSentinelSystem(), buildTodayContext(newsLines, perplexityNews), 1200, 'claude-sonnet-4-5');
+    const raw = await callClaude(buildSentinelSystem(), buildTodayContext(newsLines, perplexityNews, prices), 1200, 'claude-sonnet-4-5');
     const clean = raw.replace(/```json|```/g, '').trim();
     const data = JSON.parse(clean);
     lastSentinelResult = data;
@@ -2439,7 +2457,9 @@ Odpowiadaj TYLKO w formacie JSON:
 ${tableJson}
   ],
   "alert_claude_code": "Wskazówka dla Claude Code na MT5 — czego unikać lub na co uważać"
-}`;
+}
+
+KRYTYCZNE: W polach "status" i "narracja" UŻYWAJ WYŁĄCZNIE cen z sekcji "AKTUALNE CENY RYNKOWE" w kontekście. NIE WYMYŚLAJ cen. Jeśli brak danych cenowych, nie podawaj żadnych konkretnych poziomów.`;
 }
 
 function buildReportHtml(data, label, timeStr) {
@@ -2546,11 +2566,13 @@ async function generateReport(slotId) {
   if (btn) { btn.disabled = true; btn.textContent = 'Pobieram newsy…'; }
   if (loadEl) loadEl.style.display = 'block';
   try {
-    const [newsLines, perplexityNews] = await Promise.all([fetchRssHeadlines(), fetchPerplexityNews()]);
+    const [newsLines, perplexityNews, prices] = await Promise.all([
+      fetchRssHeadlines(), fetchPerplexityNews(), fetchCurrentPrices(),
+    ]);
     _validatorNewsLines  = newsLines;
     _validatorPerplexity = perplexityNews;
     if (btn) btn.textContent = 'Generuję…';
-    const raw   = await callClaude(buildReportSystem(), buildTodayContext(newsLines, perplexityNews) + '\n\n' + slot.ctx, 1000, 'claude-sonnet-4-5');
+    const raw   = await callClaude(buildReportSystem(), buildTodayContext(newsLines, perplexityNews, prices) + '\n\n' + slot.ctx, 1000, 'claude-sonnet-4-5');
     const clean = raw.replace(/```json|```/g,'').trim();
     const data  = JSON.parse(clean);
     saveStoredReport(slotId, data);
