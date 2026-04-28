@@ -1921,28 +1921,41 @@ function toggleCalDay(dayKey) {
 
 // ─── DYNAMIC TODAY CONTEXT ───
 // Real-time web search via Perplexity sonar model. Returns content string or ''.
-async function fetchPerplexityNews(instruments) {
-  if (!PERPLEXITY_API_KEY) return '';
-  const syms = (instruments || getWatchlist().map(x => x.sym)).join(', ') || 'major forex, gold, indices';
-  const query = `Latest market news today for ${syms}: geopolitical events, central bank decisions, key economic data releases, any major risk events. Be concise, focus on price-moving news only.`;
+// Generic Perplexity sonar call — reads key fresh from localStorage every time
+async function callPerplexity(query) {
+  const key = localStorage.getItem('perplexity_api_key') || PERPLEXITY_API_KEY;
+  if (!key) return '';
   try {
     const resp = await fetch('https://api.perplexity.ai/chat/completions', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${PERPLEXITY_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'sonar',
-        messages: [{ role: 'user', content: query }],
-        max_tokens: 400,
-      }),
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+      body: JSON.stringify({ model: 'sonar', messages: [{ role: 'user', content: query }], max_tokens: 500 }),
       signal: AbortSignal.timeout(15000),
     });
-    if (!resp.ok) return '';
+    if (!resp.ok) { console.warn('[Perplexity] HTTP', resp.status); return ''; }
     const data = await resp.json();
     return data?.choices?.[0]?.message?.content?.trim() || '';
-  } catch { return ''; }
+  } catch(e) { console.warn('[Perplexity]', e.message); return ''; }
+}
+
+// Sentinel / Reports query — current news + prices for all watched instruments
+async function fetchPerplexityNews(instruments) {
+  const syms = (instruments || getWatchlist().map(x => x.sym)).join(', ') || 'NQ, ES, CL, GOLD, BTC';
+  const today = new Date().toLocaleDateString('en-US', {timeZone:'Europe/London', weekday:'long', year:'numeric', month:'long', day:'numeric'});
+  const query = `Today is ${today}. Provide the CURRENT PRICES and latest market news for: ${syms}.
+For each instrument state: current price, today's % change, and the key price-moving factor.
+Also cover: Fed/ECB/central bank decisions, geopolitical events, commodity data (oil inventories, gold drivers), major macro data releases today.
+Be factual and concise. Only include information from today — no historical context.`;
+  return callPerplexity(query);
+}
+
+// Monday Outlook query — weekend events and market impact
+async function fetchPerplexityWeekend() {
+  const today = new Date().toLocaleDateString('en-US', {timeZone:'Europe/London', weekday:'long', year:'numeric', month:'long', day:'numeric'});
+  const query = `Today is ${today} (Monday morning). Summarise what happened in financial markets over the weekend.
+Cover: geopolitical events affecting oil, gold, nasdaq, bitcoin; central bank statements; weekend data releases; opening prices for futures this morning.
+What are the biggest risks and catalysts for markets to open this week? Be factual and concise.`;
+  return callPerplexity(query);
 }
 
 // Fetch headlines from Reuters, BBC Business, and Yahoo Finance in parallel.
@@ -1999,7 +2012,7 @@ function buildTodayContext(newsLines, perplexityNews, prices) {
     : '- [brak danych — trader dodaje ręcznie w zakładce Newsy]';
 
   const perplexityStr = perplexityNews
-    ? `\nPERPLEXITY AI — REAL-TIME SEARCH:\n${perplexityNews}\n`
+    ? `\n⚡ REAL-TIME VERIFIED DATA FROM PERPLEXITY — USE AS PRIMARY SOURCE. Ignore training-data prices and events. These are facts from today:\n${perplexityNews}\n`
     : '';
 
   return `DATA: ${dateStr}, godzina UK: ${timeStr}
@@ -3703,13 +3716,14 @@ async function runMondayOutlook() {
 
   // Fetch weekend news from Reuters, BBC Business, Yahoo Finance + Perplexity
   btn.textContent = 'Pobieram newsy weekendowe...';
-  const [weekendNewsLines, perplexityWeekend] = await Promise.all([fetchRssHeadlines(), fetchPerplexityNews()]);
+  const [weekendNewsLines, perplexityWeekend] = await Promise.all([fetchRssHeadlines(), fetchPerplexityWeekend()]);
   const newsHeadlines = [
     ...weekendNewsLines.map(l => `- ${l}`),
-    ...(perplexityWeekend ? [`\n[Perplexity AI — real-time]:\n${perplexityWeekend}`] : []),
+    ...(perplexityWeekend ? [`\n⚡ REAL-TIME VERIFIED DATA FROM PERPLEXITY (primary source — ignore training data):\n${perplexityWeekend}`] : []),
   ].join('\n') || 'Nie udało się pobrać newsów weekendowych.';
 
   const system = `Jesteś ekspertem analizy rynków finansowych. Na podstawie Friday Close i newsów weekendowych wygeneruj Monday Outlook.
+WAŻNE: Dane z sekcji "REAL-TIME VERIFIED DATA FROM PERPLEXITY" są zweryfikowane i aktualne — używaj ich jako główne źródło. Ignoruj ceny i wydarzenia ze swojego treningu.
 Odpowiadaj TYLKO w formacie JSON:
 {
   "summary": "Krótkie podsumowanie sytuacji (max 2 zdania)",
