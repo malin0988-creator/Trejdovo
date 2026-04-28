@@ -444,6 +444,18 @@ body::before {
 .cv-actual { font-weight:700; }
 .cv-beat { color:var(--green); }
 .cv-miss { color:var(--red); }
+.cal-today-section { border:1px solid var(--accent); border-radius:8px; margin-bottom:12px; overflow:hidden; }
+.cal-day-header { display:flex; align-items:center; gap:8px; padding:8px 12px; background:var(--card); }
+.cal-today-hdr { background:color-mix(in srgb,var(--accent) 12%,var(--card)); border-bottom:1px solid var(--border); }
+.cal-dziś-badge { background:var(--accent); color:#000; font-size:9px; font-weight:800; padding:2px 6px; border-radius:4px; font-family:var(--mono); letter-spacing:0.5px; flex-shrink:0; }
+.cal-day-title { font-size:12px; font-weight:600; color:var(--t2); text-transform:capitalize; }
+.cal-day-count { font-size:10px; color:var(--t3); font-family:var(--mono); margin-left:auto; }
+.cal-accordion { border:1px solid var(--border); border-radius:8px; margin-bottom:8px; overflow:hidden; }
+.cal-acc-hdr { cursor:pointer; user-select:none; }
+.cal-acc-hdr:hover { background:var(--hover,rgba(255,255,255,.05)); }
+.cal-acc-arrow { font-size:9px; color:var(--t3); width:14px; flex-shrink:0; }
+.cal-acc-body .cal-row,.cal-today-section .cal-row { padding:8px 12px; }
+.cal-past { opacity:.45; }
 
 /* ─── TRADE CARD ─── */
 .trade-card {
@@ -1753,36 +1765,37 @@ async function loadCalendar() {
       return;
     }
 
-    // ── WEEKDAY branch ──
+    // ── WEEKDAY branch — full-week view ──
     const todayUK = now.toLocaleDateString('en-CA', {timeZone:'Europe/London'});
 
-    // All non-holiday events for display; High+Medium only for AI context
-    const todayAll = all.filter(e => {
+    // Group all non-holiday events by day
+    const eventsByDay = {};
+    all.forEach(e => {
+      if (e.impact === 'Holiday') return;
       const eDay = new Date(e.date).toLocaleDateString('en-CA', {timeZone:'Europe/London'});
-      return eDay === todayUK && e.impact !== 'Holiday';
-    }).sort((a, b) => new Date(a.date) - new Date(b.date));
+      if (!eventsByDay[eDay]) eventsByDay[eDay] = [];
+      eventsByDay[eDay].push(e);
+    });
+    Object.keys(eventsByDay).forEach(day => {
+      eventsByDay[day].sort((a, b) => new Date(a.date) - new Date(b.date));
+    });
 
-    calendarData = todayAll.filter(e => e.impact === 'High' || e.impact === 'Medium');
+    const todayEvents = eventsByDay[todayUK] || [];
+    calendarData = todayEvents.filter(e => e.impact === 'High' || e.impact === 'Medium');
     badge.textContent = 'Live';
     badge.className   = 'badge b-live';
 
-    if (todayAll.length === 0) {
-      container.innerHTML = '<div style="color:var(--t3);font-size:12px;padding:8px 0">Brak wydarzeń makro na dziś.</div>';
-      return;
-    }
-
     const nowTs = new Date();
-    container.innerHTML = todayAll.map(e => {
+
+    function renderCalRow(e, forceGray) {
       const eDate    = new Date(e.date);
       const ukTime   = eDate.toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
-      const isPast   = eDate < nowTs;
+      const isPast   = forceGray || eDate < nowTs;
       const isHigh   = e.impact === 'High';
       const isMed    = e.impact === 'Medium';
       const timeClass = isPast ? 'cal-time past' : isHigh ? 'cal-time alert' : 'cal-time';
       const barClass  = isHigh ? 'cal-bar cb-h' : isMed ? 'cal-bar cb-m' : 'cal-bar cb-l';
-
       const tags = renderImpactTags(e);
-
       let vals = '';
       if (e.forecast) vals += `<span>Prognoza: ${e.forecast}</span>`;
       if (e.actual) {
@@ -1796,8 +1809,7 @@ async function loadCalendar() {
         vals += `<span style="color:var(--t3)">Oczekuje...</span>`;
         if (isHigh) vals += `<span class="badge b-warn" style="margin-left:4px">HIGH</span>`;
       }
-
-      return `<div class="cal-row">
+      return `<div class="cal-row${isPast ? ' cal-past' : ''}">
         <span class="${timeClass}">${ukTime}${isHigh && !isPast ? ' ⚠️' : ''}</span>
         <div class="${barClass}"></div>
         <div class="cal-info">
@@ -1805,8 +1817,45 @@ async function loadCalendar() {
           <div class="cal-vals">${vals}</div>
         </div>
       </div>`;
-    }).join('');
+    }
 
+    const sortedDays = Object.keys(eventsByDay).sort();
+    const todayLabel = now.toLocaleDateString('pl', {timeZone:'Europe/London', weekday:'long', day:'numeric', month:'long'});
+    let html = '';
+
+    // ── TODAY section (pinned, highlighted) ──
+    html += `<div class="cal-today-section">
+      <div class="cal-day-header cal-today-hdr">
+        <span class="cal-dziś-badge">DZIŚ</span>
+        <span class="cal-day-title">${todayLabel}</span>
+        <span class="cal-day-count">${todayEvents.length} wyd.</span>
+      </div>
+      ${todayEvents.length ? todayEvents.map(e => renderCalRow(e, false)).join('') : '<div style="color:var(--t3);font-size:12px;padding:8px 12px">Brak wydarzeń makro na dziś.</div>'}
+    </div>`;
+
+    // ── REST OF WEEK — collapsible accordion per day ──
+    sortedDays.forEach(day => {
+      if (day <= todayUK) return;
+      const dayEvents = eventsByDay[day];
+      if (!dayEvents || !dayEvents.length) return;
+      const d = new Date(day + 'T12:00:00');
+      const dayLabel = d.toLocaleDateString('pl', {weekday:'long', day:'numeric', month:'long'});
+      const highCount = dayEvents.filter(e => e.impact === 'High').length;
+      const highBadge = highCount ? `<span class="badge b-warn" style="font-size:9px;padding:1px 5px;margin-left:4px">${highCount}×HIGH</span>` : '';
+      const safeDay = day.replace(/-/g, '');
+      html += `<div class="cal-accordion">
+        <div class="cal-day-header cal-acc-hdr" onclick="toggleCalDay('${safeDay}')">
+          <span class="cal-acc-arrow" id="cal-arr-${safeDay}">▶</span>
+          <span class="cal-day-title">${dayLabel}</span>${highBadge}
+          <span class="cal-day-count">${dayEvents.length} wyd.</span>
+        </div>
+        <div class="cal-acc-body" id="cal-day-${safeDay}" style="display:none">
+          ${dayEvents.map(e => renderCalRow(e, false)).join('')}
+        </div>
+      </div>`;
+    });
+
+    container.innerHTML = html;
     rebuildAlerts();
 
   } catch(err) {
@@ -1826,6 +1875,15 @@ async function loadCalendar() {
           onclick="this.disabled=true;this.textContent='Ładuję…';loadCalendar()">↻ Spróbuj teraz</button>
       </div>`;
   }
+}
+
+function toggleCalDay(dayKey) {
+  const body = document.getElementById('cal-day-' + dayKey);
+  const arr  = document.getElementById('cal-arr-' + dayKey);
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (arr) arr.textContent = open ? '▶' : '▼';
 }
 
 // ─── DYNAMIC TODAY CONTEXT ───
@@ -2099,13 +2157,11 @@ async function fetchCurrentPrices() {
   const prices = {};
   await Promise.allSettled(getWatchlist().map(async item => {
     try {
-      const url  = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(item.sym)}&token=${FINNHUB_API_KEY}`;
-      const resp = await fetch(url, {signal: AbortSignal.timeout(5000)});
-      const d    = await resp.json();
-      if (d?.c) prices[item.sym] = {price: d.c, pct: (((d.c - d.pc) / d.pc) * 100).toFixed(2)};
+      const {price, changePct} = await fetchFinnhubPrice(item);
+      prices[item.sym] = {price, pct: changePct.toFixed(2)};
     } catch {}
   }));
-  _cachedPrices = prices;   // cache for use throughout the session
+  _cachedPrices = prices;
   return prices;
 }
 
@@ -3171,37 +3227,35 @@ function getWatchlist() {
 }
 function saveWatchlist(items) { localStorage.setItem('tj_watchlist', JSON.stringify(items)); }
 
-// Finnhub symbol map — covers all default and common watchlist instruments
-const FINNHUB_SYM_MAP = {
-  // Crypto (Binance feed via Finnhub)
-  BTC:'BINANCE:BTCUSDT',  ETH:'BINANCE:ETHUSDT',  SOL:'BINANCE:SOLUSDT',
-  BNB:'BINANCE:BNBUSDT',  XRP:'BINANCE:XRPUSDT',  DOGE:'BINANCE:DOGEUSDT',
-  ADA:'BINANCE:ADAUSDT',  AVAX:'BINANCE:AVAXUSDT', LINK:'BINANCE:LINKUSDT',
-  LTC:'BINANCE:LTCUSDT',  DOT:'BINANCE:DOTUSDT',   MATIC:'BINANCE:MATICUSDT',
-  SHIB:'BINANCE:SHIBUSDT',UNI:'BINANCE:UNIUSDT',   ATOM:'BINANCE:ATOMUSDT',
-  // Indices & Futures (OANDA CFD feed)
-  NQ:'OANDA:NAS100_USD',  ES:'OANDA:SPX500_USD',   YM:'OANDA:US30_USD',
-  RTY:'OANDA:US2000_USD',
-  // Commodities
-  GOLD:'OANDA:XAU_USD',   GC:'OANDA:XAU_USD',      SI:'OANDA:XAG_USD',
-  CL:'OANDA:USOIL_USD',   USOIL:'OANDA:USOIL_USD', NG:'OANDA:NATGAS_USD',
-  // Forex
-  'EUR/USD':'OANDA:EUR_USD', 'GBP/USD':'OANDA:GBP_USD', 'USD/JPY':'OANDA:USD_JPY',
-  'EUR/JPY':'OANDA:EUR_JPY', 'AUD/USD':'OANDA:AUD_USD', 'USD/CAD':'OANDA:USD_CAD',
-  EURUSD:'OANDA:EUR_USD',    GBPUSD:'OANDA:GBP_USD',
+// Finnhub symbol fallbacks — tries each candidate in order, caches first working one
+const FINNHUB_SYM_FALLBACKS = {
+  // Futures — CME/NYMEX/COMEX continuous contracts first, then OANDA CFD
+  NQ:       ['CME_MINI:NQ1!',  'CME:NQ1!',       'OANDA:NAS100_USD'],
+  ES:       ['CME_MINI:ES1!',  'CME:ES1!',        'OANDA:SPX500_USD'],
+  YM:       ['CBOT_MINI:YM1!', 'CBOT:YM1!',       'OANDA:US30_USD'],
+  RTY:      ['CME_MINI:RTY1!', 'CME:RTY1!',       'OANDA:US2000_USD'],
+  CL:       ['NYMEX:CL1!',     'OANDA:USOIL_USD'],
+  USOIL:    ['NYMEX:CL1!',     'OANDA:USOIL_USD'],
+  NG:       ['NYMEX:NG1!',     'OANDA:NATGAS_USD'],
+  GOLD:     ['COMEX:GC1!',     'OANDA:XAU_USD',   'OANDA:XAUUSD'],
+  GC:       ['COMEX:GC1!',     'OANDA:XAU_USD'],
+  SI:       ['COMEX:SI1!',     'OANDA:XAG_USD'],
+  // Crypto — Binance via Finnhub
+  BTC:      ['BINANCE:BTCUSDT'], ETH:  ['BINANCE:ETHUSDT'],  SOL:  ['BINANCE:SOLUSDT'],
+  BNB:      ['BINANCE:BNBUSDT'], XRP:  ['BINANCE:XRPUSDT'],  DOGE: ['BINANCE:DOGEUSDT'],
+  ADA:      ['BINANCE:ADAUSDT'], AVAX: ['BINANCE:AVAXUSDT'],  LINK: ['BINANCE:LINKUSDT'],
+  LTC:      ['BINANCE:LTCUSDT'], DOT:  ['BINANCE:DOTUSDT'],   MATIC:['BINANCE:MATICUSDT'],
+  SHIB:     ['BINANCE:SHIBUSDT'],UNI:  ['BINANCE:UNIUSDT'],   ATOM: ['BINANCE:ATOMUSDT'],
+  // Forex — OANDA
+  'EUR/USD':['OANDA:EUR_USD'],  'GBP/USD':['OANDA:GBP_USD'], 'USD/JPY':['OANDA:USD_JPY'],
+  'EUR/JPY':['OANDA:EUR_JPY'],  'AUD/USD':['OANDA:AUD_USD'], 'USD/CAD':['OANDA:USD_CAD'],
+  EURUSD:   ['OANDA:EUR_USD'],   GBPUSD:  ['OANDA:GBP_USD'],
 };
-
-function getFinnhubSym(item) {
-  if (FINNHUB_SYM_MAP[item.sym]) return FINNHUB_SYM_MAP[item.sym];
-  if (CRYPTO_SYMS.has(item.sym)) return `BINANCE:${item.sym}USDT`;
-  return item.apiSym || item.sym;
-}
+const _resolvedFhSyms = {};  // caches first working Finnhub symbol per instrument
 
 function detectApiConfig(sym) {
-  if (CRYPTO_SYMS.has(sym))   return {type:'finnhub', apiSym: FINNHUB_SYM_MAP[sym] || sym+'USDT'};
-  if (FUTURES_MAP[sym])        return {type:'finnhub', apiSym: FINNHUB_SYM_MAP[sym] || FUTURES_MAP[sym]};
-  if (FOREX_SUBS[sym])         return {type:'finnhub', apiSym: FINNHUB_SYM_MAP[sym] || FOREX_SUBS[sym]};
-  return {type:'finnhub', apiSym: sym};
+  const fhs = FINNHUB_SYM_FALLBACKS[sym];
+  return {type: 'finnhub', apiSym: fhs ? fhs[0] : (CRYPTO_SYMS.has(sym) ? `BINANCE:${sym}USDT` : sym)};
 }
 
 function formatWlPrice(p) {
@@ -3282,14 +3336,41 @@ function renderWatchlist() {
   `;
 }
 
-async function fetchFinnhubPrice(fhSym) {
-  const url  = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(fhSym)}&token=${FINNHUB_API_KEY}`;
-  const resp = await fetch(url, {signal: AbortSignal.timeout(6000)});
-  if (!resp.ok) throw new Error(`Finnhub ${resp.status}`);
-  const d = await resp.json();
-  if (!d?.c || d.c === 0) throw new Error('No data for ' + fhSym);
-  const changePct = d.pc ? ((d.c - d.pc) / d.pc * 100) : 0;
-  return {price: d.c, changePct};
+async function fetchFinnhubPrice(item) {
+  const sym = typeof item === 'string' ? item : item.sym;
+
+  // Use cached working symbol if available
+  if (_resolvedFhSyms[sym]) {
+    try {
+      const url  = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(_resolvedFhSyms[sym])}&token=${FINNHUB_API_KEY}`;
+      const resp = await fetch(url, {signal: AbortSignal.timeout(6000)});
+      if (resp.ok) {
+        const d = await resp.json();
+        if (d?.c && d.c !== 0) {
+          return {price: d.c, changePct: d.pc ? ((d.c - d.pc) / d.pc * 100) : 0};
+        }
+      }
+    } catch {}
+    delete _resolvedFhSyms[sym]; // cached sym stopped working, retry fallbacks
+  }
+
+  // Try candidates in order
+  const candidates = FINNHUB_SYM_FALLBACKS[sym] || (
+    CRYPTO_SYMS.has(sym) ? [`BINANCE:${sym}USDT`] :
+    [`OANDA:${sym.replace('/',  '_')}`]
+  );
+  for (const candidate of candidates) {
+    try {
+      const url  = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(candidate)}&token=${FINNHUB_API_KEY}`;
+      const resp = await fetch(url, {signal: AbortSignal.timeout(6000)});
+      if (!resp.ok) continue;
+      const d = await resp.json();
+      if (!d?.c || d.c === 0) continue;
+      _resolvedFhSyms[sym] = candidate;
+      return {price: d.c, changePct: d.pc ? ((d.c - d.pc) / d.pc * 100) : 0};
+    } catch {}
+  }
+  throw new Error(`No valid Finnhub data for ${sym}`);
 }
 
 function wlSaveLastPrice(sym, price, changePct) {
@@ -3322,9 +3403,8 @@ async function refreshWatchlistPrices() {
     const tsEl    = document.getElementById('wl-ts-'    + i);
     if (!priceEl || !chgEl) return;
 
-    const fhSym = getFinnhubSym(item);
     try {
-      const {price, changePct} = await fetchFinnhubPrice(fhSym);
+      const {price, changePct} = await fetchFinnhubPrice(item);
       wlSaveLastPrice(item.sym, price, changePct);
       priceEl.textContent = formatWlPrice(price);
       priceEl.classList.remove('wl-price-offline');
@@ -3396,9 +3476,7 @@ function wlSymInput(input) {
   const hint = document.getElementById('wl-api-hint');
   if (hint && sym) {
     const cfg = detectApiConfig(sym);
-    hint.textContent = cfg.type === 'binance'
-      ? '✓ Crypto — Binance API (' + cfg.apiSym + ')'
-      : '✓ Market — Yahoo Finance (' + cfg.apiSym + ')';
+    hint.textContent = '✓ Finnhub: ' + cfg.apiSym;
   }
 }
 
