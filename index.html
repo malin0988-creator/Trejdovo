@@ -566,8 +566,14 @@ body::before {
 .wl-top { display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px; }
 .wl-sym { font-family:var(--mono); font-size:13px; font-weight:700; }
 .wl-chg { font-family:var(--mono); font-size:10px; font-weight:700; padding:2px 6px; border-radius:4px; }
-.chg-p { background:rgba(0,217,126,0.08); color:var(--green); }
-.chg-n { background:rgba(255,61,85,0.08); color:var(--red); }
+.chg-p   { background:rgba(0,217,126,0.08); color:var(--green); }
+.chg-n   { background:rgba(255,61,85,0.08);  color:var(--red); }
+.chg-off { background:rgba(255,170,0,0.1);   color:var(--amber); }
+.wl-ts   { font-size:8px; color:var(--t3); font-family:var(--mono); margin-top:4px; letter-spacing:.02em; }
+.wl-price-offline { color:var(--amber) !important; }
+.wl-refresh-hdr  { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+.wl-refresh-btn  { font-family:var(--mono); font-size:9px; color:var(--cyan); background:transparent; border:1px solid var(--cyan)33; border-radius:5px; padding:3px 8px; cursor:pointer; }
+.wl-refresh-btn:disabled { opacity:0.4; cursor:default; }
 .wl-price { font-family:var(--mono); font-size:17px; font-weight:700; margin-bottom:2px; }
 .wl-name { font-size:10px; color:var(--t3); }
 .wl-remove {
@@ -1183,7 +1189,11 @@ body::before {
 <!-- ══════════ WATCHLIST ══════════ -->
 <section class="sec" id="sec-watchlist">
 
-  <div class="stitle">Aktywne instrumenty</div>
+  <div class="wl-refresh-hdr">
+    <span class="stitle" style="margin-bottom:0">Aktywne instrumenty</span>
+    <button class="wl-refresh-btn" id="wl-refresh-btn" onclick="manualWlRefresh()">↻ Odśwież</button>
+  </div>
+  <div style="font-size:9px;color:var(--t3);font-family:var(--mono);margin-bottom:8px" id="wl-last-update">Ładowanie cen...</div>
   <div class="wl-grid" id="wl-grid">
     <div class="wl-card" style="opacity:0.5;pointer-events:none">
       <div class="wl-top"><span class="wl-sym wl-loading">Ładowanie...</span></div>
@@ -3161,11 +3171,37 @@ function getWatchlist() {
 }
 function saveWatchlist(items) { localStorage.setItem('tj_watchlist', JSON.stringify(items)); }
 
+// Finnhub symbol map — covers all default and common watchlist instruments
+const FINNHUB_SYM_MAP = {
+  // Crypto (Binance feed via Finnhub)
+  BTC:'BINANCE:BTCUSDT',  ETH:'BINANCE:ETHUSDT',  SOL:'BINANCE:SOLUSDT',
+  BNB:'BINANCE:BNBUSDT',  XRP:'BINANCE:XRPUSDT',  DOGE:'BINANCE:DOGEUSDT',
+  ADA:'BINANCE:ADAUSDT',  AVAX:'BINANCE:AVAXUSDT', LINK:'BINANCE:LINKUSDT',
+  LTC:'BINANCE:LTCUSDT',  DOT:'BINANCE:DOTUSDT',   MATIC:'BINANCE:MATICUSDT',
+  SHIB:'BINANCE:SHIBUSDT',UNI:'BINANCE:UNIUSDT',   ATOM:'BINANCE:ATOMUSDT',
+  // Indices & Futures (OANDA CFD feed)
+  NQ:'OANDA:NAS100_USD',  ES:'OANDA:SPX500_USD',   YM:'OANDA:US30_USD',
+  RTY:'OANDA:US2000_USD',
+  // Commodities
+  GOLD:'OANDA:XAU_USD',   GC:'OANDA:XAU_USD',      SI:'OANDA:XAG_USD',
+  CL:'OANDA:USOIL_USD',   USOIL:'OANDA:USOIL_USD', NG:'OANDA:NATGAS_USD',
+  // Forex
+  'EUR/USD':'OANDA:EUR_USD', 'GBP/USD':'OANDA:GBP_USD', 'USD/JPY':'OANDA:USD_JPY',
+  'EUR/JPY':'OANDA:EUR_JPY', 'AUD/USD':'OANDA:AUD_USD', 'USD/CAD':'OANDA:USD_CAD',
+  EURUSD:'OANDA:EUR_USD',    GBPUSD:'OANDA:GBP_USD',
+};
+
+function getFinnhubSym(item) {
+  if (FINNHUB_SYM_MAP[item.sym]) return FINNHUB_SYM_MAP[item.sym];
+  if (CRYPTO_SYMS.has(item.sym)) return `BINANCE:${item.sym}USDT`;
+  return item.apiSym || item.sym;
+}
+
 function detectApiConfig(sym) {
-  if (CRYPTO_SYMS.has(sym))   return {type:'binance', apiSym: sym + 'USDT'};
-  if (FUTURES_MAP[sym])        return {type:'yahoo',   apiSym: FUTURES_MAP[sym]};
-  if (FOREX_SUBS[sym])         return {type:'yahoo',   apiSym: FOREX_SUBS[sym]};
-  return {type:'yahoo', apiSym: sym};
+  if (CRYPTO_SYMS.has(sym))   return {type:'finnhub', apiSym: FINNHUB_SYM_MAP[sym] || sym+'USDT'};
+  if (FUTURES_MAP[sym])        return {type:'finnhub', apiSym: FINNHUB_SYM_MAP[sym] || FUTURES_MAP[sym]};
+  if (FOREX_SUBS[sym])         return {type:'finnhub', apiSym: FINNHUB_SYM_MAP[sym] || FOREX_SUBS[sym]};
+  return {type:'finnhub', apiSym: sym};
 }
 
 function formatWlPrice(p) {
@@ -3235,6 +3271,7 @@ function renderWatchlist() {
       </div>
       <div class="wl-price" id="wl-price-${i}">—</div>
       <div class="wl-name">${item.name}</div>
+      <div class="wl-ts" id="wl-ts-${i}"></div>
     </div>
   `).join('') + `
     <div class="wl-card" onclick="addInstrument()">
@@ -3245,58 +3282,85 @@ function renderWatchlist() {
   `;
 }
 
-async function fetchBinancePrice(apiSym) {
-  const r = await fetch('https://api.binance.com/api/v3/ticker/24hr?symbol=' + apiSym);
-  if (!r.ok) throw new Error('Binance ' + r.status);
-  const d = await r.json();
-  return {price: parseFloat(d.lastPrice), changePct: parseFloat(d.priceChangePercent)};
+async function fetchFinnhubPrice(fhSym) {
+  const url  = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(fhSym)}&token=${FINNHUB_API_KEY}`;
+  const resp = await fetch(url, {signal: AbortSignal.timeout(6000)});
+  if (!resp.ok) throw new Error(`Finnhub ${resp.status}`);
+  const d = await resp.json();
+  if (!d?.c || d.c === 0) throw new Error('No data for ' + fhSym);
+  const changePct = d.pc ? ((d.c - d.pc) / d.pc * 100) : 0;
+  return {price: d.c, changePct};
 }
 
-async function fetchYahooPrice(apiSym) {
-  const chartUrl = 'https://query2.finance.yahoo.com/v8/finance/chart/' + encodeURIComponent(apiSym) + '?interval=1d&range=2d';
-  const urls = [
-    chartUrl,
-    'https://api.allorigins.win/raw?url=' + encodeURIComponent(chartUrl),
-  ];
-  for (const url of urls) {
-    try {
-      const ctrl = new AbortController();
-      const t = setTimeout(() => ctrl.abort(), 7000);
-      const r = await fetch(url, {signal: ctrl.signal});
-      clearTimeout(t);
-      if (!r.ok) continue;
-      const d = await r.json();
-      const meta = d.chart?.result?.[0]?.meta;
-      if (!meta?.regularMarketPrice) continue;
-      const price = meta.regularMarketPrice;
-      const prev  = meta.chartPreviousClose || meta.previousClose;
-      const changePct = prev ? ((price - prev) / prev * 100) : 0;
-      return {price, changePct};
-    } catch(e) { continue; }
-  }
-  throw new Error('Unavailable: ' + apiSym);
+function wlSaveLastPrice(sym, price, changePct) {
+  try {
+    const cache = JSON.parse(localStorage.getItem('tj_wl_prices') || '{}');
+    cache[sym] = {price, changePct, ts: Date.now()};
+    localStorage.setItem('tj_wl_prices', JSON.stringify(cache));
+  } catch {}
+}
+function wlGetLastPrice(sym) {
+  try { return JSON.parse(localStorage.getItem('tj_wl_prices') || '{}')[sym] || null; }
+  catch { return null; }
 }
 
 async function refreshWatchlistPrices() {
-  const items = getWatchlist();
-  for (let i = 0; i < items.length; i++) {
+  const items   = getWatchlist();
+  const btn     = document.getElementById('wl-refresh-btn');
+  const updEl   = document.getElementById('wl-last-update');
+  if (btn) btn.disabled = true;
+
+  // Mark all cards as refreshing (pulse on change badge)
+  items.forEach((_, i) => {
+    const chgEl = document.getElementById('wl-chg-' + i);
+    if (chgEl && chgEl.textContent === '…') return; // already loading
+  });
+
+  await Promise.allSettled(items.map(async (item, i) => {
     const priceEl = document.getElementById('wl-price-' + i);
     const chgEl   = document.getElementById('wl-chg-'   + i);
-    if (!priceEl || !chgEl) continue;
+    const tsEl    = document.getElementById('wl-ts-'    + i);
+    if (!priceEl || !chgEl) return;
+
+    const fhSym = getFinnhubSym(item);
     try {
-      const {price, changePct} = items[i].type === 'binance'
-        ? await fetchBinancePrice(items[i].apiSym)
-        : await fetchYahooPrice(items[i].apiSym);
+      const {price, changePct} = await fetchFinnhubPrice(fhSym);
+      wlSaveLastPrice(item.sym, price, changePct);
       priceEl.textContent = formatWlPrice(price);
+      priceEl.classList.remove('wl-price-offline');
       const up = changePct >= 0;
       chgEl.textContent = (up ? '+' : '') + changePct.toFixed(2) + '%';
       chgEl.className   = 'wl-chg ' + (up ? 'chg-p' : 'chg-n');
-    } catch(e) {
-      priceEl.textContent = '—';
-      chgEl.textContent = 'ERR';
-      chgEl.className   = 'wl-chg chg-n';
+      if (tsEl) tsEl.textContent = new Date().toLocaleTimeString('pl', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+    } catch {
+      const last = wlGetLastPrice(item.sym);
+      if (last) {
+        priceEl.textContent = formatWlPrice(last.price);
+        priceEl.classList.add('wl-price-offline');
+        const up = last.changePct >= 0;
+        chgEl.textContent = 'Offline';
+        chgEl.className   = 'wl-chg chg-off';
+        const ago = new Date(last.ts);
+        if (tsEl) tsEl.textContent = `ostatnia: ${ago.toLocaleTimeString('pl', {hour:'2-digit', minute:'2-digit'})}`;
+      } else {
+        priceEl.textContent = '—';
+        priceEl.classList.remove('wl-price-offline');
+        chgEl.textContent = 'ERR';
+        chgEl.className   = 'wl-chg chg-n';
+        if (tsEl) tsEl.textContent = '';
+      }
     }
-  }
+  }));
+
+  const now = new Date().toLocaleTimeString('pl', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+  if (updEl) updEl.textContent = `Zaktualizowano: ${now} · odświeżam co 30s`;
+  if (btn)   { btn.disabled = false; btn.textContent = '↻ Odśwież'; }
+}
+
+async function manualWlRefresh() {
+  const btn = document.getElementById('wl-refresh-btn');
+  if (btn) btn.textContent = '…';
+  await refreshWatchlistPrices();
 }
 
 let wlRefreshTimer = null;
