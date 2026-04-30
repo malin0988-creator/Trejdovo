@@ -1935,25 +1935,59 @@ async function callPerplexity(query) {
     if (!resp.ok) { console.warn('[Perplexity] HTTP', resp.status); return ''; }
     const payload = await resp.json();   // parse the chat completion envelope as JSON
     const text = payload?.choices?.[0]?.message?.content?.trim() || '';
-    // Sanitize before injecting into Claude's context: strip control chars,
-    // normalize smart quotes, cap length — prevents the text from breaking
-    // Claude's JSON output when it quotes/paraphrases Perplexity content.
+    // Sanitize before injecting into Claude's context:
+    // Convert ALL double-quote variants (including straight ") to apostrophes —
+    // if these survive into Claude's JSON string values they break JSON.parse.
     return text
       .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
-      .replace(/[""«»]/g, '"')
+      .replace(/[""«»„]/g, "'")
       .replace(/[''‚]/g, "'")
+      .replace(/"/g, "'")
       .slice(0, 700);
   } catch(e) { console.warn('[Perplexity]', e.message); return ''; }
 }
 
 // Robustly parse Claude's JSON response, tolerating markdown fences,
-// leading commentary, and trailing commas.
+// leading commentary, trailing commas, and unescaped quotes in string values.
 function safeParseJSON(raw) {
+  // 1. Strip markdown fences and trim
   let s = raw.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
   try { return JSON.parse(s); } catch {}
+
+  // 2. Extract first {...} block (skip leading commentary)
   const m = s.match(/\{[\s\S]*\}/);
-  if (m) try { return JSON.parse(m[0]); } catch {}
-  return JSON.parse(s.replace(/,(\s*[}\]])/g, '$1'));
+  if (m) { s = m[0]; try { return JSON.parse(s); } catch {} }
+
+  // 3. Remove trailing commas before } or ]
+  s = s.replace(/,(\s*[}\]])/g, '$1');
+  try { return JSON.parse(s); } catch {}
+
+  // 4. Escape unescaped double-quotes that appear INSIDE string values
+  //    Walk char-by-char; when inside a string, any " not preceded by \ and
+  //    not followed by a JSON delimiter is an embedded quote — escape it.
+  let fixed = '';
+  let inStr = false;
+  let esc   = false;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (esc)         { fixed += c; esc = false; continue; }
+    if (c === '\\')  { fixed += c; esc = true;  continue; }
+    if (c === '"') {
+      if (!inStr) { inStr = true; fixed += c; continue; }
+      // Peek ahead past whitespace to decide if this closes the string
+      let j = i + 1;
+      while (j < s.length && /\s/.test(s[j])) j++;
+      const nx = s[j];
+      if (nx === ':' || nx === ',' || nx === '}' || nx === ']' || j >= s.length) {
+        inStr = false; fixed += c;
+      } else {
+        fixed += '\\"'; // embedded quote — escape it
+      }
+      continue;
+    }
+    fixed += c;
+  }
+  return JSON.parse(fixed);
 }
 
 // Sentinel / Reports query — current news + prices for all watched instruments
@@ -2337,7 +2371,8 @@ ${instJson}
   "setup_alert": "null lub opis potencjalnego setupu"
 }
 
-KRYTYCZNE: W polach "reason", "zapalnik" i "plan_dnia" UŻYWAJ WYŁĄCZNIE cen z sekcji "AKTUALNE CENY RYNKOWE" w kontekście. NIE WYMYŚLAJ, NIE SZACUJ i NIE UŻYWAJ cen ze swojego treningu. Jeśli brak danych cenowych, nie podawaj żadnych konkretnych poziomów.`;
+KRYTYCZNE — CENY: W polach "reason", "zapalnik" i "plan_dnia" UŻYWAJ WYŁĄCZNIE cen z sekcji "AKTUALNE CENY RYNKOWE". NIE WYMYŚLAJ cen ze swojego treningu.
+KRYTYCZNE — FORMAT JSON: Wewnątrz wartości tekstowych NIE UŻYWAJ znaku cudzysłowu ". Zamiast tego używaj apostrofu ' lub polskich cudzysłowów „". Nie dodawaj żadnego tekstu poza strukturą JSON.`;
 }
 
 
@@ -2360,7 +2395,21 @@ async function runSentinel() {
     _validatorPerplexity = perplexityNews;
     btn.textContent = 'Analizuję...';
     const raw = await callClaude(buildSentinelSystem(), buildTodayContext(newsLines, perplexityNews, prices), 1200, 'claude-sonnet-4-5');
-    const data = safeParseJSON(raw);
+    let data;
+    try {
+      data = safeParseJSON(raw);
+    } catch(parseErr) {
+      // JSON parsing failed after all repair attempts — show raw text in a readable card
+      console.warn('[Sentinel] JSON parse failed, showing raw text:', parseErr.message);
+      results.innerHTML = `<div class="card" style="border-left:3px solid var(--amber)">
+        <div style="font-family:var(--mono);font-size:10px;color:var(--amber);margin-bottom:8px">⚠️ ANALIZA SENTINEL (format tekstowy — błąd parsowania JSON)</div>
+        <div style="font-size:12px;color:var(--t2);white-space:pre-wrap;line-height:1.7">${raw.replace(/```json|```/g,'').trim()}</div>
+      </div>`;
+      btn.disabled = false;
+      btn.textContent = '🛡️ URUCHOM ANALIZĘ SENTINEL';
+      loading.style.display = 'none';
+      return;
+    }
     lastSentinelResult = data;
     localStorage.setItem('tj_sentinel', JSON.stringify({data, ts: Date.now()}));
     renderSentinel(data);
