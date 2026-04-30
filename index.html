@@ -2221,7 +2221,7 @@ async function fetchCurrentPrices() {
   const prices = {};
   await Promise.allSettled(getWatchlist().map(async item => {
     try {
-      const {price, changePct} = await fetchFinnhubPrice(item);
+      const {price, changePct} = await fetchPrice(item);
       prices[item.sym] = {price, pct: changePct.toFixed(2)};
     } catch {
       // Fall back to last-known price from localStorage so analysis prompts always have data
@@ -3440,6 +3440,75 @@ function renderWatchlist() {
   `;
 }
 
+// ─── MULTI-SOURCE PRICE FETCHERS ───────────────────────────────────────────
+
+// Yahoo Finance via allorigins CORS proxy — futures, stocks, ETFs
+async function fetchYahooPrice(yahooSym) {
+  const yUrl  = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSym)}?interval=1m&range=1d`;
+  const proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(yUrl);
+  const resp  = await fetch(proxy, {signal: AbortSignal.timeout(8000)});
+  if (!resp.ok) throw new Error(`Yahoo HTTP ${resp.status}`);
+  const data  = await resp.json();
+  const meta  = data?.chart?.result?.[0]?.meta;
+  const price = meta?.regularMarketPrice;
+  const prev  = meta?.chartPreviousClose ?? meta?.previousClose;
+  if (!price) throw new Error(`No Yahoo price for ${yahooSym}`);
+  console.log(`[Yahoo] ${yahooSym}: ${price}`);
+  return {price, changePct: prev ? ((price - prev) / prev * 100) : 0};
+}
+
+// metals.live — free, no-key gold/silver spot price API
+async function fetchMetalsLivePrice(metal = 'gold') {
+  const resp  = await fetch(`https://api.metals.live/v1/spot/${metal}`, {signal: AbortSignal.timeout(6000)});
+  if (!resp.ok) throw new Error(`metals.live HTTP ${resp.status}`);
+  const data  = await resp.json();
+  const obj   = Array.isArray(data) ? data[0] : data;
+  const price = obj?.[metal] ?? obj?.price ?? obj?.usd;
+  if (!price) throw new Error('metals.live: empty response');
+  console.log(`[metals.live] ${metal}: ${price}`);
+  return {price, changePct: 0};
+}
+
+// Binance public REST — crypto, no key, CORS-friendly
+async function fetchBinancePrice(binanceSym) {
+  const resp  = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${binanceSym}`, {signal: AbortSignal.timeout(6000)});
+  if (!resp.ok) throw new Error(`Binance HTTP ${resp.status}`);
+  const d     = await resp.json();
+  const price = parseFloat(d.lastPrice);
+  if (!price) throw new Error(`Binance: no price for ${binanceSym}`);
+  console.log(`[Binance] ${binanceSym}: ${price}`);
+  return {price, changePct: parseFloat(d.priceChangePercent || '0')};
+}
+
+// Main dispatcher — routes each instrument to the right free data source
+async function fetchPrice(item) {
+  const sym = typeof item === 'string' ? item : item.sym;
+
+  // Crypto → Binance direct (no key, reliable, CORS-friendly)
+  if (CRYPTO_SYMS.has(sym)) {
+    return fetchBinancePrice(`${sym}USDT`);
+  }
+
+  // Gold → metals.live (free, no key), fallback to Yahoo GC=F
+  if (sym === 'GOLD' || sym === 'GC') {
+    try { return await fetchMetalsLivePrice('gold'); }
+    catch(e) {
+      console.warn('[metals.live] failed:', e.message, '→ Yahoo GC=F');
+      return fetchYahooPrice('GC=F');
+    }
+  }
+
+  // Futures (NQ, ES, CL, SI, NG, RTY, YM…) → Yahoo Finance via proxy
+  const yahooSym = FUTURES_MAP[sym];
+  if (yahooSym) return fetchYahooPrice(yahooSym);
+
+  // Forex (EUR/USD etc.) → Finnhub OANDA (free tier supports major pairs)
+  if (FOREX_SUBS[sym] || sym.includes('/')) return fetchFinnhubPrice(item);
+
+  // Unknown → try Yahoo then Finnhub
+  try { return await fetchYahooPrice(sym); } catch { return fetchFinnhubPrice(item); }
+}
+
 async function fetchFinnhubPrice(item) {
   const sym = typeof item === 'string' ? item : item.sym;
   if (!FINNHUB_API_KEY) { console.warn('[Finnhub] API key not set'); throw new Error('No Finnhub key'); }
@@ -3519,7 +3588,7 @@ async function refreshWatchlistPrices() {
     if (!priceEl || !chgEl) return;
 
     try {
-      const {price, changePct} = await fetchFinnhubPrice(item);
+      const {price, changePct} = await fetchPrice(item);
       wlSaveLastPrice(item.sym, price, changePct);
       priceEl.textContent = formatWlPrice(price);
       priceEl.classList.remove('wl-price-offline');
