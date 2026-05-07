@@ -2033,49 +2033,134 @@ async function fetchRssHeadlines() {
   return lines;
 }
 
-function buildTodayContext(newsLines, perplexityNews, prices) {
+// ─── THREE-SOURCE ANALYSIS CONTEXT ───────────────────────────────────────────
+
+function _calendarInterpretation(title, actual, forecast) {
+  const t = title.toLowerCase();
+  const a = parseFloat(actual), f = parseFloat(forecast);
+  if (isNaN(a) || isNaN(f)) return '';
+  const lowerIsBetter = /claims|unemployment|deficit|inventories|loss/i.test(t);
+  const beat = lowerIsBetter ? a < f : a > f;
+  const miss = lowerIsBetter ? a > f : a < f;
+  const wl = getWatchlist().map(x => x.sym);
+  const hasNQ = wl.some(s => ['NQ','ES','YM'].includes(s));
+  const hasCL = wl.includes('CL');
+  const hasGOLD = wl.some(s => ['GOLD','GC','XAU'].includes(s));
+  const hasBTC = wl.includes('BTC');
+
+  if (/nfp|non.farm|payroll/.test(t))
+    return beat ? 'BULLISH: silny rynek pracy → USD mocny' + (hasNQ?' → bullish NQ':'')
+                : 'BEARISH: słaby rynek pracy → risk-off' + (hasNQ?' → bearish NQ':'');
+  if (/initial.*claims|jobless/.test(t))
+    return beat ? 'BULLISH: mniej bezrobotnych niż prognoza' + (hasNQ?' → bullish NQ':'') + (hasGOLD?' → bearish GOLD':'')
+                : 'BEARISH: więcej wniosków o zasiłek' + (hasNQ?' → bearish NQ':'') + (hasGOLD?' → bullish GOLD':'');
+  if (/\bcpi\b|inflation|pce/.test(t))
+    return beat ? 'BEARISH: wyższa inflacja → Fed hawkish' + (hasNQ?' → bearish NQ':'') + (hasGOLD?' → bearish GOLD':'')
+                : 'BULLISH: niższa inflacja → Fed dovish' + (hasNQ?' → bullish NQ':'') + (hasGOLD?' → bullish GOLD':'');
+  if (/fomc|fed fund|interest rate decision/.test(t))
+    return '⚠️ KLUCZOWE dla wszystkich instrumentów';
+  if (/eia|crude|petroleum|oil.*inventor/.test(t))
+    return beat ? (hasCL?'BULLISH CL: mniejsze zapasy = wyższy popyt':'') : (hasCL?'BEARISH CL: większe zapasy = nadpodaż':'');
+  if (/\bgdp\b/.test(t))
+    return beat ? 'BULLISH: silny wzrost PKB' + (hasNQ?' → bullish NQ':'')
+                : 'BEARISH: słabszy wzrost PKB' + (hasNQ?' → bearish NQ':'');
+  if (/pmi|ism/.test(t))
+    return beat ? (hasNQ?'BULLISH NQ: lepszy odczyt PMI/ISM':'') : (hasNQ?'BEARISH NQ: słabszy PMI/ISM':'');
+  return '';
+}
+
+function buildCalendarContext() {
+  if (!calendarData.length) return '- Brak danych z kalendarza makro na dziś.';
   const now = new Date();
+  return calendarData.map(e => {
+    const eDate  = new Date(e.date);
+    const t      = eDate.toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
+    const isPast = eDate < now;
+    const imp    = e.impact === 'High' ? 'HIGH' : 'MED';
+    if (e.actual && e.forecast) {
+      const a = parseFloat(e.actual), f = parseFloat(e.forecast);
+      const lowerBetter = /claims|unemployment|deficit|inventories/i.test(e.title);
+      const beat = !isNaN(a) && !isNaN(f) && (lowerBetter ? a < f : a > f);
+      const miss = !isNaN(a) && !isNaN(f) && (lowerBetter ? a > f : a < f);
+      const verdict = beat ? '✓ BEAT' : miss ? '✗ MISS' : '= IN LINE';
+      const interp  = _calendarInterpretation(e.title, e.actual, e.forecast);
+      return `- ${t} [${imp}] ${e.title} (${e.country}): actual ${e.actual} vs prognoza ${e.forecast} → ${verdict}${interp ? ' | ' + interp : ''}`;
+    } else if (e.actual) {
+      return `- ${t} [${imp}] ${e.title} (${e.country}): actual ${e.actual} (opublikowano)`;
+    } else if (isPast) {
+      return `- ${t} [${imp}] ${e.title} (${e.country}): opublikowano — brak aktualnych danych`;
+    } else {
+      return `- ${t} [${imp}] ${e.title} (${e.country}): OCZEKUJE — prognoza ${e.forecast||'?'}`;
+    }
+  }).join('\n');
+}
+
+async function refreshCalendarActuals() {
+  if (!FINNHUB_API_KEY || !calendarData.length) return;
+  try {
+    const today = getTodayUK();
+    const url   = `https://finnhub.io/api/v1/calendar/economic?from=${today}&to=${today}&token=${FINNHUB_API_KEY}`;
+    const resp  = await fetch(url, {signal: AbortSignal.timeout(8000)});
+    if (!resp.ok) return;
+    const raw = await resp.json();
+    const arr = Array.isArray(raw?.economicCalendar) ? raw.economicCalendar : (Array.isArray(raw) ? raw : []);
+    for (const fe of arr) {
+      if (!fe.actual) continue;
+      const name = (fe.event || fe.title || '').trim().toLowerCase();
+      const match = calendarData.find(e => e.title?.trim().toLowerCase() === name ||
+                                           e.title?.toLowerCase().includes(name.substring(0, 20)));
+      if (match && !match.actual) { match.actual = String(fe.actual); }
+    }
+  } catch {}
+}
+
+async function getLatestPerplexityNews() {
+  const cache = getNewsCache();
+  if (cache && (Date.now() - cache.ts) < 20 * 60 * 1000) return cache.lines.join('\n');
+  try {
+    const syms = getWatchlist().map(x => x.sym).join(', ');
+    const text = await callPerplexity(
+      `Latest financial market news last 30 minutes for ${syms} — price movements, macro events, central bank news. Format: [SOURCE] headline. 12 items max.`
+    );
+    if (text) {
+      const lines = text.split('\n').map(l => l.replace(/^[\d\-\*\•\.\s]+/,'').trim()).filter(l => l.length > 15).slice(0, 15);
+      if (lines.length) { setNewsCache(lines); return lines.join('\n'); }
+    }
+  } catch {}
+  return cache?.lines?.join('\n') || '';
+}
+
+function buildTodayContext(newsLines, perplexityNews, prices) {
+  const now     = new Date();
   const dateStr = now.toLocaleDateString('pl', {timeZone:'Europe/London', weekday:'long', year:'numeric', month:'long', day:'numeric'});
   const timeStr = now.toLocaleTimeString('pl', {timeZone:'Europe/London'});
 
-  // Prices: use explicit param first, then module cache
   const pData = (prices && Object.keys(prices).length) ? prices : _cachedPrices;
   const priceSection = Object.keys(pData).length
     ? `⚠️ AKTUALNE CENY RYNKOWE — UŻYWAJ WYŁĄCZNIE TYCH WARTOŚCI. NIE WYMYŚLAJ CEN:\n` +
-      Object.entries(pData).map(([s, d]) =>
-        `  ${s}: ${d.price} (${Number(d.pct) >= 0 ? '+' : ''}${d.pct}% dzisiaj)`
-      ).join('\n')
-    : `⚠️ CENY RYNKOWE: Brak danych z Finnhub — NIE PODAWAJ żadnych konkretnych cen w analizie.`;
+      Object.entries(pData).map(([s, d]) => `  ${s}: ${d.price} (${Number(d.pct)>=0?'+':''}${d.pct}% dzisiaj)`).join('\n')
+    : `⚠️ CENY RYNKOWE: Brak danych — NIE PODAWAJ żadnych konkretnych cen.`;
 
-  let calStr = calendarData.length
-    ? calendarData.map(e => {
-        const d = new Date(e.date);
-        const t = d.toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
-        const impact = e.impact === 'High' ? 'HIGH IMPACT' : 'MED IMPACT';
-        const result = e.actual
-          ? `actual: ${e.actual} (prognoza ${e.forecast||'?'}) — ${parseFloat(e.actual)>parseFloat(e.forecast||'0')?'BEAT ✓':'MISS ✗'}`
-          : `OCZEKUJE (prognoza ${e.forecast||'?'}) ⚠️ ${impact}`;
-        return `- ${t} ${e.title} (${e.country}) — ${result}`;
-      }).join('\n')
-    : '- Brak danych z kalendarza makro na dziś';
+  // Perplexity: prefer passed param, then news cache
+  let pxStr = perplexityNews || '';
+  if (!pxStr) { const nc = getNewsCache(); if (nc) pxStr = nc.lines.join('\n'); }
 
-  const newsStr = newsLines?.length
-    ? newsLines.map(l => `- ${l}`).join('\n')
-    : '- [brak danych — trader dodaje ręcznie w zakładce Newsy]';
-
-  const perplexityStr = perplexityNews
-    ? `\n⚡ REAL-TIME VERIFIED DATA FROM PERPLEXITY — USE AS PRIMARY SOURCE. Ignore training-data prices and events. These are facts from today:\n${perplexityNews}\n`
+  const rssStr = (newsLines?.length)
+    ? newsLines.map(l => `  ${l}`).join('\n')
     : '';
+
+  const calStr = buildCalendarContext();
 
   return `DATA: ${dateStr}, godzina UK: ${timeStr}
 
 ${priceSection}
 
-NEWSY (Reuters / BBC Business / Yahoo Finance):
-${newsStr}
-${perplexityStr}
-KALENDARZ MAKRO DZIŚ:
-${calStr}`;
+━━━ REAL-TIME NEWS (Perplexity — PRIMARY SOURCE, ignore training-data prices/events) ━━━
+${pxStr || '  [brak — skonfiguruj klucz Perplexity w Config]'}
+${rssStr ? `\n━━━ RSS NEWS (Reuters/BBC/Yahoo) ━━━\n${rssStr}` : ''}
+━━━ KALENDARZ MAKRO DZIŚ — ACTUAL vs PROGNOZA ━━━
+${calStr}
+`;
 }
 
 setInterval(updateClock, 1000);
@@ -2392,13 +2477,14 @@ async function runSentinel() {
 
   try {
     btn.textContent = 'Pobieram dane rynkowe...';
-    const [newsLines, perplexityNews, prices] = await Promise.all([
-      fetchRssHeadlines(), fetchPerplexityNews(), fetchCurrentPrices(),
+    const [pxNews, prices] = await Promise.all([
+      getLatestPerplexityNews(), fetchCurrentPrices(),
     ]);
-    _validatorNewsLines  = newsLines;
-    _validatorPerplexity = perplexityNews;
+    await refreshCalendarActuals();
+    _validatorNewsLines  = [];
+    _validatorPerplexity = pxNews;
     btn.textContent = 'Analizuję...';
-    const raw = await callClaude(buildSentinelSystem(), buildTodayContext(newsLines, perplexityNews, prices), 1200, 'claude-sonnet-4-5');
+    const raw = await callClaude(buildSentinelSystem(), buildTodayContext([], pxNews, prices), 1200, 'claude-sonnet-4-5');
     const text = raw.replace(/```/g, '').trim();
     const ts = Date.now();
     lastSentinelResult = {text, ts};
@@ -2851,13 +2937,14 @@ async function generateReport(slotId) {
   if (btn) { btn.disabled = true; btn.textContent = 'Pobieram newsy…'; }
   if (loadEl) loadEl.style.display = 'block';
   try {
-    const [newsLines, perplexityNews, prices] = await Promise.all([
-      fetchRssHeadlines(), fetchPerplexityNews(), fetchCurrentPrices(),
+    const [pxNews, prices] = await Promise.all([
+      getLatestPerplexityNews(), fetchCurrentPrices(),
     ]);
-    _validatorNewsLines  = newsLines;
-    _validatorPerplexity = perplexityNews;
+    await refreshCalendarActuals();
+    _validatorNewsLines  = [];
+    _validatorPerplexity = pxNews;
     if (btn) btn.textContent = 'Generuję…';
-    const raw   = await callClaude(buildReportSystem(), buildTodayContext(newsLines, perplexityNews, prices) + '\n\n' + slot.ctx, 1000, 'claude-sonnet-4-5');
+    const raw   = await callClaude(buildReportSystem(), buildTodayContext([], pxNews, prices) + '\n\n' + slot.ctx, 1000, 'claude-sonnet-4-5');
     const data  = safeParseJSON(raw);
     saveStoredReport(slotId, data);
     renderReportsSection();
