@@ -2120,7 +2120,7 @@ function switchTo(id) {
   const map = ['dashboard','scanner','sentinel','raporty','newsy','kalendarz','journal','watchlist','ustawienia'];
   btns[map.indexOf(id)]?.classList.add('on');
   document.getElementById('fab').classList.toggle('hidden', id !== 'journal' && id !== 'dashboard');
-  if (id === 'dashboard') { renderDashboardInstruments(); if (lastSentinelResult) updateDashboardSentiment(lastSentinelResult); applyWeekendMode(); }
+  if (id === 'dashboard') { renderDashboardInstruments(); refreshDashboard(); applyWeekendMode(); }
   if (id === 'scanner')   scannerRefreshInstruments();
   if (id === 'sentinel')  applyWeekendMode();
   if (id === 'raporty')   renderReportsSection();
@@ -2404,7 +2404,7 @@ async function runSentinel() {
     lastSentinelResult = {text, ts};
     localStorage.setItem('tj_sentinel', JSON.stringify({text, ts}));
     renderSentinelText(text);
-    updateDashboardSentimentText(text);
+    refreshDashboard();
     const now = new Date().toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
     document.getElementById('sent-main-time').textContent = now;
     document.getElementById('sent-updated').textContent = `Ostatnia aktualizacja: ${now}`;
@@ -2861,6 +2861,7 @@ async function generateReport(slotId) {
     const data  = safeParseJSON(raw);
     saveStoredReport(slotId, data);
     renderReportsSection();
+    refreshDashboard();
     showNotif(`⚡ Trejdovo — ${slot.label}`, {body: `Raport AI wygenerowany — sprawdź zakładkę Raporty`});
     // Run validator async after DOM is updated
     runValidatorAgent(data).then(r => insertValidatorBadge('rpt-block-' + slotId, r));
@@ -3517,7 +3518,134 @@ function formatWlPrice(p) {
   return p.toFixed(4);
 }
 
-function renderDashboardInstruments() {
+// ─── DASHBOARD LIVE DATA ──────────────────────────────────────────────────────
+
+function getDashboardData() {
+  const todayUK = getTodayUK();
+  const candidates = [];
+
+  try {
+    const s = JSON.parse(localStorage.getItem('tj_sentinel'));
+    if (s?.text && s.ts) {
+      const srcDay = new Date(s.ts).toLocaleDateString('en-CA', {timeZone:'Europe/London'});
+      candidates.push({type:'sentinel', text:s.text, ts:s.ts, source:'Sentinel', today: srcDay === todayUK});
+    }
+  } catch {}
+
+  try {
+    const stored = getStoredReports();
+    const times  = getReportTimes();
+    for (const slot of REPORT_SLOTS) {
+      const sr = stored[slot.id];
+      if (sr?.data && sr.ts)
+        candidates.push({type:'report', data:sr.data, ts:sr.ts, source:`Raport ${times[slot.id]||slot.id}`, today:true});
+    }
+  } catch {}
+
+  try {
+    const fs = JSON.parse(localStorage.getItem('friday_close_snapshot'));
+    if (fs?.text && fs.ts)
+      candidates.push({type:'sentinel', text:fs.text, ts:fs.ts, source:'Friday Close', today:false});
+  } catch {}
+
+  if (!candidates.length) return null;
+  candidates.sort((a, b) => (a.today === b.today ? b.ts - a.ts : a.today ? -1 : 1));
+  return candidates[0];
+}
+
+function parseReportData(data) {
+  const out = {overall:null, reason:data?.narracja||'', instruments:{}, plan_dnia:[], setup_alert:null};
+  for (const row of (data?.tabela||[])) {
+    const sym = row.instrument?.toUpperCase();
+    if (!sym) continue;
+    const badge     = row.badge?.toUpperCase() || 'NEUTRAL';
+    const sentiment = (badge==='BULLISH'||badge==='BEARISH'||badge==='NEUTRAL') ? badge : 'NEUTRAL';
+    const signal    = badge === 'WATCH' ? 'WATCH' : 'WAIT';
+    const score     = sentiment==='BULLISH' ? 70 : sentiment==='BEARISH' ? 30 : 50;
+    out.instruments[sym] = {sentiment, signal, score, reason:row.status||'', zapalnik:null, trend:'SIDEWAYS', risk:5};
+  }
+  const badges = Object.values(out.instruments).map(d => d.sentiment);
+  if (badges.length) {
+    const b = badges.filter(s => s==='BULLISH').length, r = badges.filter(s => s==='BEARISH').length;
+    out.overall = b > r ? 'RISK-ON' : r > b ? 'RISK-OFF' : 'MIXED';
+  }
+  return out;
+}
+
+function refreshDashboard() {
+  const best = getDashboardData();
+  if (!best) return;
+  const parsed   = best.type === 'sentinel' ? parseSentinelText(best.text) : parseReportData(best.data);
+  const isStale  = (Date.now() - best.ts) > 4 * 3600 * 1000;
+  const tsStr    = new Date(best.ts).toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
+  const updEl    = document.getElementById('sent-updated');
+  if (updEl) updEl.textContent = `Ostatnia aktualizacja: ${tsStr} — źródło: ${best.source}`;
+
+  const sentColor     = s => s==='BULLISH'?'var(--green)':s==='BEARISH'?'var(--red)':'var(--amber)';
+  const sentClassFill = s => s==='BULLISH'?'sf-bull':s==='BEARISH'?'sf-bear':'sf-neut';
+  const sentInstCls   = s => s==='BULLISH'?'sent-bull':s==='BEARISH'?'sent-bear':'sent-neut';
+
+  for (const [inst, d] of Object.entries(parsed.instruments)) {
+    const fill      = document.getElementById('sm-fill-'    + inst);
+    const tag       = document.getElementById('sm-tag-'     + inst);
+    const sentEl    = document.getElementById('ds-sent-'    + inst);
+    const trendEl   = document.getElementById('ds-trend-'   + inst);
+    const riskEl    = document.getElementById('ds-risk-'    + inst);
+    const riskLblEl = document.getElementById('ds-risk-lbl-'+ inst);
+    const insightEl = document.getElementById('ds-insight-' + inst);
+    if (fill) { fill.className = 'sm-fill ' + sentClassFill(d.sentiment); fill.style.width = d.score + '%'; }
+    if (tag)  { tag.textContent = d.sentiment.substring(0,4); tag.style.color = sentColor(d.sentiment); }
+    if (sentEl) { sentEl.className = 'inst-sent ' + sentInstCls(d.sentiment); sentEl.textContent = d.sentiment?.substring(0,4)||'—'; }
+    if (trendEl) {
+      trendEl.textContent = {UP:'↑',DOWN:'↓',SIDEWAYS:'→'}[d.trend] || '→';
+      trendEl.style.color = {UP:'var(--green)',DOWN:'var(--red)',SIDEWAYS:'var(--amber)'}[d.trend] || 'var(--amber)';
+    }
+    if (riskEl && d.risk) riskEl.style.width = Math.round(((d.risk-1)/9)*100) + '%';
+    if (riskLblEl) riskLblEl.textContent = d.risk ? d.risk+'/10' : '—';
+    if (insightEl) {
+      insightEl.textContent = d.zapalnik ? '🚨 '+d.zapalnik : (d.reason ? d.reason.split('.')[0] : '—');
+      insightEl.style.color = d.zapalnik ? 'var(--red)' : (isStale ? 'var(--amber)' : 'var(--t3)');
+    }
+  }
+
+  const sentMain  = document.getElementById('sent-main');
+  const sentIco   = sentMain?.querySelector('.sent-ico');
+  const sentTitle = sentMain?.querySelector('.sent-title');
+  const sentBody  = document.getElementById('sent-main-body');
+  const sentInst2 = document.getElementById('sent-main-inst');
+  if (parsed.overall && sentMain)  sentMain.className = parsed.overall==='RISK-ON'?'sentinel-alert ok':parsed.overall==='MIXED'?'sentinel-alert warn':'sentinel-alert';
+  if (sentIco && parsed.overall)   sentIco.textContent   = parsed.overall==='RISK-ON'?'✅':parsed.overall==='MIXED'?'⚠️':'🔴';
+  if (sentTitle && parsed.overall) sentTitle.textContent = `${parsed.overall} — ${parsed.reason||best.source}`;
+  if (sentBody) {
+    const zapLines = Object.entries(parsed.instruments).filter(([,d])=>d.zapalnik).map(([i,d])=>`🚨 <strong>${i}:</strong> ${d.zapalnik}`).join('<br>');
+    if (parsed.setup_alert)        sentBody.innerHTML = `<strong>🎯 Setup wykryty:</strong> ${parsed.setup_alert}`;
+    else if (zapLines)             sentBody.innerHTML = zapLines;
+    else if (parsed.plan_dnia[0])  sentBody.textContent = parsed.plan_dnia[0];
+    else if (parsed.reason)        sentBody.textContent = parsed.reason;
+    else                           sentBody.textContent = 'Brak aktywnych zapalnikow.';
+  }
+  if (sentInst2) {
+    const wlMap = {}; getWatchlist().forEach(x => wlMap[x.sym] = x.color);
+    const cls = s => s==='BULLISH'?'b-bull':s==='BEARISH'?'b-bear':'b-neut';
+    sentInst2.innerHTML = Object.entries(parsed.instruments).map(([i,d])=>
+      `<span class="sent-tag ${cls(d.sentiment)}" style="color:${wlMap[i]||'var(--t2)'}">${i}</span>`).join('');
+  }
+
+  let staleEl = document.getElementById('dash-stale-warn');
+  if (isStale) {
+    if (!staleEl) {
+      staleEl = document.createElement('div');
+      staleEl.id = 'dash-stale-warn';
+      staleEl.style.cssText = 'font-size:10px;color:var(--amber);padding:4px 0 2px;font-family:var(--mono)';
+      document.getElementById('sent-meters')?.after(staleEl);
+    }
+    staleEl.textContent = '⚠ Dane mogą być nieaktualne — uruchom Sentinel';
+  } else {
+    staleEl?.remove();
+  }
+}
+
+
   const items = getWatchlist();
   const meters = document.getElementById('sent-meters');
   const instList = document.getElementById('dashboard-inst-list');
@@ -3899,8 +4027,8 @@ function applyWeekendMode() {
     const timeStr = ts.toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
     const sentUpdEl = document.getElementById('sent-updated');
     if (sentUpdEl) sentUpdEl.textContent = `Friday Close: ${dateStr}, ${timeStr}`;
-    updateDashboardSentimentText(snap.text);
     lastSentinelResult = {text: snap.text, ts: snap.ts};
+    refreshDashboard();
   }
 
   renderWeekendAlerts();
@@ -4016,7 +4144,7 @@ function restoreSentinel() {
     if (!stored?.text) return;
     lastSentinelResult = {text: stored.text, ts: stored.ts};
     renderSentinelText(stored.text);
-    updateDashboardSentimentText(stored.text);
+    refreshDashboard();
     const ts = new Date(stored.ts);
     const timeStr = ts.toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
     const dateStr = ts.toLocaleDateString('pl', {timeZone:'Europe/London', day:'numeric', month:'short'});
@@ -4271,6 +4399,7 @@ scannerRefreshInstruments();
 })();
 restoreSentinel();
 if (isWeekendNow()) applyWeekendMode();
+else refreshDashboard();
 renderReportsSection();
 startWlRefresh();
 rebuildAlerts();
