@@ -1361,6 +1361,15 @@ body::before {
     </div>
   </div>
 
+  <div class="card" style="margin-bottom:10px">
+    <div class="card-hdr" style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
+      <span class="card-label">📦 Stan cache danych</span>
+      <button onclick="clearAllCaches()" style="font-size:9px;font-family:var(--mono);color:var(--red);background:transparent;border:1px solid var(--red)44;border-radius:4px;padding:2px 8px;cursor:pointer">Wyczyść</button>
+    </div>
+    <div id="cache-status-body" style="font-size:11px;line-height:1.8"></div>
+    <div style="font-size:10px;color:var(--t3);margin-top:8px">🟢 świeży · 🟡 nieaktualny · ⚫ brak danych</div>
+  </div>
+
   <div class="card">
     <div class="card-hdr"><span class="card-label">Instrukcje — MT5 Bridge</span></div>
     <div style="font-size:11px; color:var(--t2); line-height:1.7">
@@ -1682,6 +1691,17 @@ async function loadCalendar() {
 
   label.textContent = now.toLocaleDateString('pl', {timeZone:'Europe/London', day:'numeric', month:'long', year:'numeric'});
 
+  // ── Calendar cache restore (skip Finnhub if data is <1h old and for today) ──
+  const _todayForCal = now.toLocaleDateString('en-CA', {timeZone:'Europe/London'});
+  const _calCache = typeof tjFresh === 'function' ? tjFresh('tj_calendar', 60 * 60 * 1000) : null;
+  if (_calCache && _calCache.date === _todayForCal && _calCache.events?.length && _calCache.html) {
+    calendarData = _calCache.events;
+    if (badge) { badge.textContent = 'Cache'; badge.className = 'badge b-live'; }
+    container.innerHTML = _calCache.html;
+    rebuildAlerts();
+    return;
+  }
+
   // Next Monday key as plain YYYY-MM-DD string (avoids timezone parsing bugs)
   const daysToMon   = dow === 0 ? 1 : dow === 6 ? 2 : 0;
   const nextMonDate = new Date(ukNow);
@@ -1889,6 +1909,7 @@ async function loadCalendar() {
     });
 
     container.innerHTML = html;
+    try { localStorage.setItem('tj_calendar', JSON.stringify({html, events: calendarData, date: todayUK, ts: Date.now()})); } catch {}
     rebuildAlerts();
 
   } catch(err) {
@@ -2305,10 +2326,11 @@ function switchTo(id) {
   const map = ['dashboard','scanner','sentinel','raporty','newsy','kalendarz','journal','watchlist','ustawienia'];
   btns[map.indexOf(id)]?.classList.add('on');
   document.getElementById('fab').classList.toggle('hidden', id !== 'journal' && id !== 'dashboard');
-  if (id === 'dashboard') { renderDashboardInstruments(); refreshDashboard(); applyWeekendMode(); }
-  if (id === 'scanner')   scannerRefreshInstruments();
-  if (id === 'sentinel')  applyWeekendMode();
-  if (id === 'raporty')   renderReportsSection();
+  if (id === 'dashboard')   { renderDashboardInstruments(); refreshDashboard(); applyWeekendMode(); }
+  if (id === 'scanner')     scannerRefreshInstruments();
+  if (id === 'sentinel')    applyWeekendMode();
+  if (id === 'raporty')     renderReportsSection();
+  if (id === 'ustawienia')  renderCacheStatus();
   if (id === 'newsy') {
     const nc = getNewsCache();
     if (nc && (Date.now() - nc.ts) < 30 * 60 * 1000) {
@@ -2459,6 +2481,7 @@ async function fetchCurrentPrices() {
     }
   }));
   _cachedPrices = prices;
+  try { localStorage.setItem('tj_prices', JSON.stringify({prices, ts: Date.now()})); } catch {}
   return prices;
 }
 
@@ -2877,6 +2900,29 @@ function updateDashboardSentiment(data) {
         return `<span class="sent-tag ${sentClassBadge(d.sentiment)}" style="color:${color}">${inst}</span>`;
       }).join('');
   }
+}
+
+// ─── CACHE TTL CONSTANTS ───
+const CACHE_TTL = {
+  sentinel: Infinity,            // manual refresh or 06:00 reset
+  news:     30 * 60 * 1000,      // 30 min
+  reports:  Infinity,            // all day, reset at 06:00
+  prices:   30 * 1000,           // 30 seconds (analysis snapshot)
+  calendar: 60 * 60 * 1000,      // 1 hour
+  morning:  Infinity,            // until next day reset
+};
+
+function tjGet(key) {
+  try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
+}
+function tjSet(key, payload) {
+  try { localStorage.setItem(key, JSON.stringify(payload)); } catch {}
+}
+// Returns cached value if ts exists and is within maxAgeMs; null otherwise.
+function tjFresh(key, maxAgeMs) {
+  const c = tjGet(key);
+  if (!c || !c.ts) return null;
+  return (maxAgeMs === Infinity || (Date.now() - c.ts) < maxAgeMs) ? c : null;
 }
 
 // ─── REPORT GENERATOR ───
@@ -4700,6 +4746,57 @@ function saveStrategy() {
   localStorage.setItem('tj_strategy', val);
   const btn = document.querySelector('[onclick="saveStrategy()"]');
   if (btn) { btn.textContent = '✓ ZAPISANO'; setTimeout(() => btn.textContent = 'ZAPISZ STRATEGIĘ', 1500); }
+}
+
+// ─── CACHE STATUS ─────────────────────────────────────────────────────────────
+function renderCacheStatus() {
+  const el = document.getElementById('cache-status-body');
+  if (!el) return;
+  function ageStr(ts) {
+    if (!ts) return '—';
+    const s = Math.floor((Date.now() - ts) / 1000);
+    if (s < 60)   return `${s}s temu`;
+    if (s < 3600) return `${Math.floor(s / 60)}min temu`;
+    return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}min temu`;
+  }
+  function row(label, ts, maxAge) {
+    const age = ts ? (Date.now() - ts) : Infinity;
+    const dot = !ts ? '⚫' : (maxAge === Infinity || age < maxAge) ? '🟢' : '🟡';
+    return `<div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)33">
+      <span style="color:var(--t2)">${dot} ${label}</span>
+      <span style="color:var(--t3);font-family:var(--mono);font-size:10px">${ageStr(ts)}</span>
+    </div>`;
+  }
+  const sent   = tjGet('tj_sentinel');
+  const news   = tjGet('tj_news_cache');
+  const rpt    = tjGet(RPT_KEY);
+  const prices = tjGet('tj_prices');
+  const cal    = tjGet('tj_calendar');
+  const brief  = tjGet('tj_morning_brief');
+  const wlp    = tjGet('tj_wl_prices');
+  const newestWlTs = wlp ? Math.max(...Object.values(wlp).map(v => v.ts || 0)) : null;
+
+  el.innerHTML = [
+    row('Sentinel',           sent?.ts,           CACHE_TTL.sentinel),
+    row('Newsy (Perplexity)', news?.ts,            CACHE_TTL.news),
+    row('Raport 1 (Alert 1)', rpt?.r0?.ts,         CACHE_TTL.reports),
+    row('Raport 2 (Alert 2)', rpt?.r1?.ts,         CACHE_TTL.reports),
+    row('Raport 3 (Alert 3)', rpt?.r2?.ts,         CACHE_TTL.reports),
+    row('Ceny (analiza)',     prices?.ts,           CACHE_TTL.prices),
+    row('Ceny (watchlist)',   newestWlTs || null,   30 * 1000),
+    row('Kalendarz makro',   cal?.ts,              CACHE_TTL.calendar),
+    row('Morning Brief',     brief?.ts,            CACHE_TTL.morning),
+  ].join('');
+}
+
+function clearAllCaches() {
+  if (!confirm('Wyczyścić wszystkie cache? Dane zostaną pobrane ponownie.')) return;
+  ['tj_sentinel','tj_news_cache',RPT_KEY,'tj_prices','tj_calendar',
+   'tj_morning_brief','tj_prefetch_r1','tj_prefetch_r2','tj_event_context','tj_wl_prices',
+   'friday_close_snapshot'].forEach(k => localStorage.removeItem(k));
+  calendarData = [];
+  _cachedPrices = {};
+  renderCacheStatus();
 }
 
 // ─── CROSS-TAB DASHBOARD SYNC ───
