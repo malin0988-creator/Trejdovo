@@ -2309,7 +2309,14 @@ function switchTo(id) {
   if (id === 'scanner')   scannerRefreshInstruments();
   if (id === 'sentinel')  applyWeekendMode();
   if (id === 'raporty')   renderReportsSection();
-  if (id === 'newsy') loadNews();
+  if (id === 'newsy') {
+    const nc = getNewsCache();
+    if (nc && (Date.now() - nc.ts) < 30 * 60 * 1000) {
+      renderNewsList(nc.lines, nc.ts, false, !isWithinTradingHours());
+    } else {
+      loadNews();
+    }
+  }
 }
 
 // ─── API KEY ───
@@ -3158,9 +3165,18 @@ async function loadNews(showLoading = true) {
   if (!hasPxKey) { await _loadNewsRssFallback(); return; }
 
   const cache = getNewsCache();
-  if (cache && (Date.now() - cache.ts) < 25 * 60 * 1000 && !showLoading) return;
+  const cacheAge = cache ? (Date.now() - cache.ts) : Infinity;
 
-  if (showLoading) {
+  // Cache fresh enough — render immediately, no fetch
+  if (cache && cacheAge < 30 * 60 * 1000) {
+    renderNewsList(cache.lines, cache.ts, false, false);
+    return;
+  }
+
+  // Cache exists but stale — show it instantly while we fetch in background
+  if (cache) renderNewsList(cache.lines, cache.ts, true, false);
+
+  if (showLoading && !cache) {
     if (badge) { badge.textContent = '⟳ AI'; badge.className = 'badge b-warn'; }
     container.innerHTML = '<div style="color:var(--t3);font-size:11px;padding:12px 0;text-align:center">Pobieram aktualne newsy z Perplexity AI…</div>';
   }
@@ -4174,12 +4190,19 @@ async function refreshWatchlistPrices() {
       const last = wlGetLastPrice(item.sym);
       if (last) {
         priceEl.textContent = formatWlPrice(last.price);
-        priceEl.classList.add('wl-price-offline');
-        const up = last.changePct >= 0;
-        chgEl.textContent = 'Offline';
-        chgEl.className   = 'wl-chg chg-off';
-        const ago = new Date(last.ts);
-        if (tsEl) tsEl.textContent = `ostatnia: ${ago.toLocaleTimeString('pl', {hour:'2-digit', minute:'2-digit'})}`;
+        const stale = (Date.now() - last.ts) > 5 * 60 * 1000;
+        if (stale) {
+          priceEl.classList.add('wl-price-offline');
+          chgEl.textContent = 'Offline';
+          chgEl.className   = 'wl-chg chg-off';
+          if (tsEl) tsEl.textContent = `ostatnia: ${new Date(last.ts).toLocaleTimeString('pl', {hour:'2-digit', minute:'2-digit'})}`;
+        } else {
+          priceEl.classList.remove('wl-price-offline');
+          const up = last.changePct >= 0;
+          chgEl.textContent = (up ? '+' : '') + last.changePct.toFixed(2) + '%';
+          chgEl.className   = 'wl-chg ' + (up ? 'chg-p' : 'chg-n');
+          if (tsEl) tsEl.textContent = new Date(last.ts).toLocaleTimeString('pl', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+        }
       } else {
         priceEl.textContent = '—';
         priceEl.classList.remove('wl-price-offline');
@@ -4678,6 +4701,14 @@ function saveStrategy() {
   const btn = document.querySelector('[onclick="saveStrategy()"]');
   if (btn) { btn.textContent = '✓ ZAPISANO'; setTimeout(() => btn.textContent = 'ZAPISZ STRATEGIĘ', 1500); }
 }
+
+// ─── CROSS-TAB DASHBOARD SYNC ───
+window.addEventListener('storage', e => {
+  if (e.key === 'tj_sentinel' || e.key === RPT_KEY) {
+    const active = document.querySelector('.sec.on');
+    if (active?.id === 'sec-dashboard') refreshDashboard();
+  }
+});
 
 // ─── INIT ───
 loadJournalTrades();
