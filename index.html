@@ -2353,26 +2353,30 @@ let lastSentinelResult = null;
 function buildSentinelSystem() {
   const items = getWatchlist();
   const instList = items.map(x => `${x.sym} (${x.name})`).join(', ');
-  const instJson = items.map(x =>
-    `    "${x.sym}": { "sentiment": "BULLISH"|"BEARISH"|"NEUTRAL", "score": 0-100, "signal": "WAIT"|"WATCH"|"READY", "reason": "max 2 zdania po polsku", "zapalnik": "null lub opis zapalnika fundamentalnego", "risk": 1-10, "trend": "UP"|"DOWN"|"SIDEWAYS", "correlation": "null lub np. Podąża za BTC", "conflict": "null lub opis konfliktu sygnałów" }`
-  ).join(',\n');
-  return `Jesteś Sentinel — AI agent strażnik rynku dla aplikacji Trejdovo.
+  const instTemplate = items.map(x =>
+    `${x.sym}: BULLISH/BEARISH/NEUTRAL — SIGNAL: WAIT/WATCH/READY — SCORE: 0-100\n  Powod: max 2 zdania po polsku\n  Zapalnik: opis fundamentalny lub BRAK\n  Trend: UP/DOWN/SIDEWAYS — Risk: 1-10`
+  ).join('\n\n');
+  return `Jestes Sentinel — AI agent straznik rynku dla aplikacji Trejdovo.
 
-Twoja rola: Analizujesz aktualną sytuację makroekonomiczną i newsy pod kątem ich wpływu na instrumenty: ${instList}.
+Twoja rola: Analizujesz aktualna sytuacje makroekonomiczna i newsy pod katem ich wplywu na instrumenty: ${instList}.
 
-Odpowiadaj TYLKO w formacie JSON, bez żadnego tekstu przed ani po:
-{
-  "overall": "RISK-ON" | "RISK-OFF" | "MIXED",
-  "overall_reason": "Krótkie wyjaśnienie (max 1 zdanie)",
-  "instruments": {
-${instJson}
-  },
-  "plan_dnia": ["krok 1 (max 1 zdanie)", "krok 2", "krok 3"],
-  "setup_alert": "null lub opis potencjalnego setupu"
-}
+Odpowiadaj WYLACZNIE w ponizszym formacie tekstowym. Nie uzywaj JSON. Nie uzywaj cudzislowow.
 
-KRYTYCZNE — CENY: W polach "reason", "zapalnik" i "plan_dnia" UŻYWAJ WYŁĄCZNIE cen z sekcji "AKTUALNE CENY RYNKOWE". NIE WYMYŚLAJ cen ze swojego treningu.
-KRYTYCZNE — FORMAT JSON: Wewnątrz wartości tekstowych NIE UŻYWAJ znaku cudzysłowu ". Zamiast tego używaj apostrofu ' lub polskich cudzysłowów „". Nie dodawaj żadnego tekstu poza strukturą JSON.`;
+OGOLNY NASTOJ: RISK-ON lub RISK-OFF lub MIXED
+POWOD: krotkie wyjasnienie (max 1 zdanie)
+
+--- INSTRUMENTY ---
+${instTemplate}
+
+--- PLAN DNIA ---
+1. krok pierwszy (max 1 zdanie)
+2. krok drugi
+3. krok trzeci
+
+--- SETUP ALERT ---
+Opis potencjalnego setupu lub BRAK
+
+KRYTYCZNE: W opisach UZYWAJ WYLACZNIE cen z sekcji AKTUALNE CENY RYNKOWE. NIE WYMYSLAJ cen ze swojego treningu.`;
 }
 
 
@@ -2395,36 +2399,16 @@ async function runSentinel() {
     _validatorPerplexity = perplexityNews;
     btn.textContent = 'Analizuję...';
     const raw = await callClaude(buildSentinelSystem(), buildTodayContext(newsLines, perplexityNews, prices), 1200, 'claude-sonnet-4-5');
-    let data;
-    try {
-      data = safeParseJSON(raw);
-    } catch(parseErr) {
-      // JSON parsing failed after all repair attempts — show raw text in a readable card
-      console.warn('[Sentinel] JSON parse failed, showing raw text:', parseErr.message);
-      results.innerHTML = `<div class="card" style="border-left:3px solid var(--amber)">
-        <div style="font-family:var(--mono);font-size:10px;color:var(--amber);margin-bottom:8px">⚠️ ANALIZA SENTINEL (format tekstowy — błąd parsowania JSON)</div>
-        <div style="font-size:12px;color:var(--t2);white-space:pre-wrap;line-height:1.7">${raw.replace(/```json|```/g,'').trim()}</div>
-      </div>`;
-      btn.disabled = false;
-      btn.textContent = '🛡️ URUCHOM ANALIZĘ SENTINEL';
-      loading.style.display = 'none';
-      return;
-    }
-    lastSentinelResult = data;
-    localStorage.setItem('tj_sentinel', JSON.stringify({data, ts: Date.now()}));
-    renderSentinel(data);
-    updateDashboardSentiment(data);
+    const text = raw.replace(/```/g, '').trim();
+    const ts = Date.now();
+    lastSentinelResult = {text, ts};
+    localStorage.setItem('tj_sentinel', JSON.stringify({text, ts}));
+    renderSentinelText(text);
+    updateDashboardSentimentText(text);
     const now = new Date().toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
     document.getElementById('sent-main-time').textContent = now;
     document.getElementById('sent-updated').textContent = `Ostatnia aktualizacja: ${now}`;
-    const hasZap = Object.values(data.instruments||{}).some(d => d?.zapalnik && d.zapalnik !== 'null');
-    const notifBody = data.setup_alert && data.setup_alert !== 'null'
-      ? `Setup: ${data.setup_alert}`
-      : hasZap ? `Zapalnik fundamentalny wykryty — sprawdź Sentinel`
-      : `Analiza gotowa — ${data.overall||'—'}`;
-    showNotif('🛡️ Trejdovo Sentinel', {body: notifBody});
-    // Run validator async — does not block render
-    runValidatorAgent(data).then(r => insertValidatorBadge('sentinel-results', r));
+    showNotif('🛡️ Trejdovo Sentinel', {body: 'Analiza gotowa — sprawdź wyniki Sentinel'});
   } catch(e) {
     console.error('[Sentinel] error:', e);
     const isFetch = e.message === 'Failed to fetch' || e.name === 'TypeError';
@@ -2439,65 +2423,50 @@ async function runSentinel() {
   loading.style.display = 'none';
 }
 
-function renderSentinel(data) {
+function renderSentinelText(text) {
   const results = document.getElementById('sentinel-results');
-  const oc = data.overall === 'RISK-ON' ? 'var(--green)' : data.overall === 'RISK-OFF' ? 'var(--red)' : 'var(--amber)';
-
-  let html = `
-  <div class="sentinel-alert ${data.overall==='RISK-ON'?'ok':data.overall==='MIXED'?'warn':''}">
+  const overallMatch = text.match(/OGOLNY NASTOJ:\s*(RISK-ON|RISK-OFF|MIXED)/i);
+  const overall = overallMatch ? overallMatch[1] : 'MIXED';
+  const oc = overall === 'RISK-ON' ? 'var(--green)' : overall === 'RISK-OFF' ? 'var(--red)' : 'var(--amber)';
+  const ico = overall === 'RISK-ON' ? '✅' : overall === 'RISK-OFF' ? '🔴' : '⚠️';
+  const alertClass = overall === 'RISK-ON' ? 'ok' : overall === 'MIXED' ? 'warn' : '';
+  const reasonMatch = text.match(/POWOD:\s*(.+)/i);
+  const reason = reasonMatch ? reasonMatch[1].trim() : '';
+  const safe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  results.innerHTML = `
+  <div class="sentinel-alert ${alertClass}">
     <div class="sent-hdr">
-      <span class="sent-ico">${data.overall==='RISK-ON'?'✅':data.overall==='MIXED'?'⚠️':'🔴'}</span>
-      <span class="sent-title">${data.overall} — ${data.overall_reason}</span>
+      <span class="sent-ico">${ico}</span>
+      <span class="sent-title">${overall}${reason ? ' — ' + reason : ''}</span>
     </div>
+  </div>
+  <div class="card" style="border-left:3px solid ${oc}">
+    <div style="font-size:12px;color:var(--t2);white-space:pre-wrap;line-height:1.8;font-family:var(--mono)">${safe}</div>
   </div>`;
+}
 
-  const wlMap = {}; getWatchlist().forEach(x => wlMap[x.sym] = x.color);
-  const instColors = new Proxy(wlMap, {get:(t,k) => t[k] || 'var(--t2)'});
-  const signalColors = {WAIT:'var(--t3)',WATCH:'var(--amber)',READY:'var(--green)'};
-
-  for (const [inst, d] of Object.entries(data.instruments || {})) {
-    if (!d) continue;
-    const sentClass = d.sentiment==='BULLISH'?'b-bull':d.sentiment==='BEARISH'?'b-bear':'b-neut';
-    const zapHtml = d.zapalnik && d.zapalnik!=='null' ? `
-      <div style="margin-top:8px;padding:7px 10px;background:rgba(255,61,85,0.06);border-left:2px solid var(--red);border-radius:5px;font-size:10px;color:var(--red)">
-        🚨 ZAPALNIK: ${d.zapalnik}
-      </div>` : '';
-
-    html += `
-    <div class="card" id="sent-inst-${inst}" style="border-left:3px solid ${instColors[inst]};margin-bottom:8px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-        <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:${instColors[inst]}">${inst}</span>
-        <div style="display:flex;gap:6px;align-items:center">
-          <span class="badge ${sentClass}">${d.sentiment}</span>
-          <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${signalColors[d.signal]}">${d.signal}</span>
-        </div>
-      </div>
-      <div style="font-size:12px;color:var(--t2);line-height:1.6">${d.reason}</div>
-      ${zapHtml}
-    </div>`;
+function updateDashboardSentimentText(text) {
+  if (!text) return;
+  const overallMatch = text.match(/OGOLNY NASTOJ:\s*(RISK-ON|RISK-OFF|MIXED)/i);
+  const overall = overallMatch ? overallMatch[1] : null;
+  const reasonMatch = text.match(/POWOD:\s*(.+)/i);
+  const reason = reasonMatch ? reasonMatch[1].trim() : '';
+  const sentMain  = document.getElementById('sent-main');
+  const sentIco   = sentMain?.querySelector('.sent-ico');
+  const sentTitle = sentMain?.querySelector('.sent-title');
+  const sentBody  = document.getElementById('sent-main-body');
+  if (sentMain && overall) {
+    sentMain.className = overall === 'RISK-ON' ? 'sentinel-alert ok'
+      : overall === 'MIXED' ? 'sentinel-alert warn' : 'sentinel-alert';
   }
-
-  if (Array.isArray(data.plan_dnia) && data.plan_dnia.length) {
-    html += `<div class="plan-card"><div class="plan-title">📋 Plan Dnia</div>`;
-    data.plan_dnia.forEach((step, i) => {
-      html += `<div class="plan-step"><span class="plan-num">${i+1}.</span><div>${step}</div></div>`;
-    });
-    html += `</div>`;
-  }
-
-  if (data.setup_alert && data.setup_alert !== 'null') {
-    html += `
-    <div class="alert-pulse ok">
-      <div class="ap-dot"></div>
-      <div class="ap-text"><strong>🎯 POTENCJALNY SETUP:</strong> ${data.setup_alert}</div>
-    </div>`;
-  }
-
-  results.innerHTML = html;
+  if (sentIco && overall)   sentIco.textContent   = overall === 'RISK-ON' ? '✅' : overall === 'MIXED' ? '⚠️' : '🔴';
+  if (sentTitle && overall) sentTitle.textContent = `${overall} — ${reason}`;
+  if (sentBody) sentBody.innerHTML = reason || text.split('\n').slice(0, 3).join(' ');
 }
 
 function updateDashboardSentiment(data) {
   if (!data) return;
+  if (data.text) { updateDashboardSentimentText(data.text); return; }
   const sentColor = s => s==='BULLISH'?'var(--green)':s==='BEARISH'?'var(--red)':'var(--amber)';
   const sentClass = s => s==='BULLISH'?'sf-bull':s==='BEARISH'?'sf-bear':'sf-neut';
   const sentInst  = s => s==='BULLISH'?'sent-bull':s==='BEARISH'?'sent-bear':'sent-neut';
@@ -3315,8 +3284,8 @@ function checkScheduledAlerts() {
 
   // Auto-save Friday close snapshot at 21:00 UK
   const ukDay = uk.getDay(); // 5=Friday
-  if (ukDay === 5 && h === 21 && m === 0 && lastSentinelResult) {
-    localStorage.setItem('friday_close_snapshot', JSON.stringify({data: lastSentinelResult, ts: Date.now()}));
+  if (ukDay === 5 && h === 21 && m === 0 && lastSentinelResult?.text) {
+    localStorage.setItem('friday_close_snapshot', JSON.stringify({text: lastSentinelResult.text, ts: Date.now()}));
     showNotif('📸 Trejdovo', {body: 'Friday Close Snapshot zapisany. Dobrego weekendu!'});
   }
 
@@ -3742,17 +3711,16 @@ function removeInstrument(idx) {
 function getFridaySnapshot() {
   try {
     const s = JSON.parse(localStorage.getItem('friday_close_snapshot'));
-    if (s?.data) return s;
-    // Fallback: use most recent Sentinel analysis
+    if (s?.text) return s;
     const sentinel = JSON.parse(localStorage.getItem('tj_sentinel'));
-    if (sentinel?.data) return { data: sentinel.data, ts: sentinel.ts, isFallback: true };
+    if (sentinel?.text) return { text: sentinel.text, ts: sentinel.ts, isFallback: true };
     return null;
   } catch { return null; }
 }
 
 function saveFridayClose() {
-  if (!lastSentinelResult) { alert('Najpierw uruchom Sentinel, aby zapisać snapshot.'); return; }
-  localStorage.setItem('friday_close_snapshot', JSON.stringify({data: lastSentinelResult, ts: Date.now()}));
+  if (!lastSentinelResult?.text) { alert('Najpierw uruchom Sentinel, aby zapisać snapshot.'); return; }
+  localStorage.setItem('friday_close_snapshot', JSON.stringify({text: lastSentinelResult.text, ts: Date.now()}));
   showNotif('📸 Friday Close zapisany', {body: 'Snapshot gotowy do Monday Outlook'});
   const btn = document.getElementById('friday-close-btn');
   if (btn) { btn.textContent = '✅ Zapisano!'; setTimeout(() => { btn.textContent = '📸 Zapisz Friday Close'; }, 2500); }
@@ -3800,8 +3768,8 @@ function applyWeekendMode() {
     const timeStr = ts.toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
     const sentUpdEl = document.getElementById('sent-updated');
     if (sentUpdEl) sentUpdEl.textContent = `Friday Close: ${dateStr}, ${timeStr}`;
-    updateDashboardSentiment(snap.data);
-    lastSentinelResult = snap.data;
+    updateDashboardSentimentText(snap.text);
+    lastSentinelResult = {text: snap.text, ts: snap.ts};
   }
 
   renderWeekendAlerts();
@@ -3869,18 +3837,8 @@ async function runMondayOutlook() {
   if (results) results.innerHTML = '';
 
   const snap = getFridaySnapshot();
-  const snapLabel = snap
-    ? (snap.isFallback
-        ? `Ostatnia analiza Sentinel (${new Date(snap.ts).toLocaleDateString('pl', {timeZone:'Europe/London'})}, brak dedykowanego Friday Close):`
-        : `Friday Close Snapshot (${new Date(snap.ts).toLocaleDateString('pl', {timeZone:'Europe/London'})}):`
-      )
-    : null;
   const snapSummary = snap
-    ? `${snapLabel}\n` +
-      Object.entries(snap.data?.instruments || {}).map(([sym, d]) =>
-        `${sym}: ${d?.sentiment || '?'} (score: ${d?.score ?? '?'}), trend: ${d?.trend || '?'}, risk: ${d?.risk ?? '?'}/10. ${d?.reason || ''}`
-      ).join('\n') +
-      `\nOverall: ${snap.data?.overall || '?'} — ${snap.data?.overall_reason || ''}`
+    ? `Friday Close Snapshot (${new Date(snap.ts).toLocaleDateString('pl', {timeZone:'Europe/London'})}):\n${snap.text}`
     : 'Brak danych Sentinel — analizuj wyłącznie na podstawie newsów weekendowych.';
 
   // Fetch weekend news from Reuters, BBC Business, Yahoo Finance + Perplexity
@@ -3924,10 +3882,10 @@ Odpowiadaj TYLKO w formacie JSON:
 function restoreSentinel() {
   try {
     const stored = JSON.parse(localStorage.getItem('tj_sentinel'));
-    if (!stored?.data) return;
-    lastSentinelResult = stored.data;
-    renderSentinel(stored.data);
-    updateDashboardSentiment(stored.data);
+    if (!stored?.text) return;
+    lastSentinelResult = {text: stored.text, ts: stored.ts};
+    renderSentinelText(stored.text);
+    updateDashboardSentimentText(stored.text);
     const ts = new Date(stored.ts);
     const timeStr = ts.toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
     const dateStr = ts.toLocaleDateString('pl', {timeZone:'Europe/London', day:'numeric', month:'short'});
@@ -4034,16 +3992,8 @@ async function runScannerAnalysis() {
   const strategy = localStorage.getItem('tj_strategy') || '';
 
   let sentinelCtx = null;
-  if (lastSentinelResult) {
-    const overall = lastSentinelResult.overall
-      ? `Ogólny rynek: ${lastSentinelResult.overall} — ${lastSentinelResult.overall_reason || ''}`
-      : null;
-    let instLine = null;
-    if (sym && sym !== 'OTHER' && lastSentinelResult.instruments?.[sym]) {
-      const d = lastSentinelResult.instruments[sym];
-      instLine = `${sym}: ${d.sentiment || '?'} (score: ${d.score ?? '?'}), signal: ${d.signal || '?'}. ${d.reason || ''}${d.zapalnik && d.zapalnik !== 'null' ? ' ZAPALNIK: ' + d.zapalnik : ''}`;
-    }
-    sentinelCtx = [overall, instLine].filter(Boolean).join('\n') || null;
+  if (lastSentinelResult?.text) {
+    sentinelCtx = lastSentinelResult.text.slice(0, 800);
   }
 
   let calCtx = null;
