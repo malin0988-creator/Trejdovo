@@ -2423,45 +2423,176 @@ async function runSentinel() {
   loading.style.display = 'none';
 }
 
+function parseSentinelText(text) {
+  const out = { overall: null, reason: '', instruments: {}, plan_dnia: [], setup_alert: null };
+  const om = text.match(/OGOLNY NASTOJ:\s*(RISK-ON|RISK-OFF|MIXED)/i);
+  if (om) out.overall = om[1].toUpperCase();
+  const pm = text.match(/POWOD:\s*(.+)/i);
+  if (pm) out.reason = pm[1].trim();
+
+  const instSec = text.match(/---\s*INSTRUMENTY\s*---([\s\S]*?)(?:---\s*PLAN|$)/i);
+  if (instSec) {
+    let cur = null;
+    for (const raw of instSec[1].split('\n')) {
+      const line = raw.trim();
+      if (!line) continue;
+      const hm = line.match(/^([A-Z0-9\/=.]{2,10}):\s*(BULLISH|BEARISH|NEUTRAL)\s*[—\-]+\s*SIGNAL:\s*(WAIT|WATCH|READY)\s*[—\-]+\s*SCORE:\s*(\d+)/i);
+      if (hm) {
+        cur = { sentiment: hm[2].toUpperCase(), signal: hm[3].toUpperCase(), score: +hm[4], reason: '', zapalnik: null, trend: 'SIDEWAYS', risk: 5 };
+        out.instruments[hm[1].toUpperCase()] = cur;
+        continue;
+      }
+      if (!cur) continue;
+      const powm = line.match(/^Powod:\s*(.+)/i);
+      if (powm) { cur.reason = powm[1]; continue; }
+      const zapm = line.match(/^Zapalnik:\s*(.+)/i);
+      if (zapm) { const v = zapm[1].trim(); cur.zapalnik = (v.toUpperCase() === 'BRAK' || v === '—') ? null : v; continue; }
+      const trm = line.match(/Trend:\s*(UP|DOWN|SIDEWAYS)/i);
+      if (trm) cur.trend = trm[1].toUpperCase();
+      const rkm = line.match(/Risk:\s*(\d+)/i);
+      if (rkm) cur.risk = +rkm[1];
+    }
+  }
+
+  const planSec = text.match(/---\s*PLAN DNIA\s*---([\s\S]*?)(?:---\s*SETUP|$)/i);
+  if (planSec) {
+    out.plan_dnia = planSec[1].trim().split('\n').map(l => l.replace(/^\d+\.\s*/, '').trim()).filter(Boolean);
+  }
+
+  const setupSec = text.match(/---\s*SETUP ALERT\s*---([\s\S]*?)$/i);
+  if (setupSec) {
+    const v = setupSec[1].trim();
+    out.setup_alert = (!v || v.toUpperCase() === 'BRAK') ? null : v;
+  }
+  return out;
+}
+
 function renderSentinelText(text) {
   const results = document.getElementById('sentinel-results');
-  const overallMatch = text.match(/OGOLNY NASTOJ:\s*(RISK-ON|RISK-OFF|MIXED)/i);
-  const overall = overallMatch ? overallMatch[1] : 'MIXED';
+  const data = parseSentinelText(text);
+  const overall = data.overall || 'MIXED';
   const oc = overall === 'RISK-ON' ? 'var(--green)' : overall === 'RISK-OFF' ? 'var(--red)' : 'var(--amber)';
   const ico = overall === 'RISK-ON' ? '✅' : overall === 'RISK-OFF' ? '🔴' : '⚠️';
   const alertClass = overall === 'RISK-ON' ? 'ok' : overall === 'MIXED' ? 'warn' : '';
-  const reasonMatch = text.match(/POWOD:\s*(.+)/i);
-  const reason = reasonMatch ? reasonMatch[1].trim() : '';
-  const safe = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  results.innerHTML = `
+  const sentClass = s => s==='BULLISH'?'b-bull':s==='BEARISH'?'b-bear':'b-neut';
+  const signalColor = sg => sg==='READY'?'var(--green)':sg==='WATCH'?'var(--amber)':'var(--t3)';
+  const wlMap = {}; getWatchlist().forEach(x => wlMap[x.sym] = x.color);
+
+  let html = `
   <div class="sentinel-alert ${alertClass}">
     <div class="sent-hdr">
       <span class="sent-ico">${ico}</span>
-      <span class="sent-title">${overall}${reason ? ' — ' + reason : ''}</span>
+      <span class="sent-title">${overall}${data.reason ? ' — ' + data.reason : ''}</span>
     </div>
-  </div>
-  <div class="card" style="border-left:3px solid ${oc}">
-    <div style="font-size:12px;color:var(--t2);white-space:pre-wrap;line-height:1.8;font-family:var(--mono)">${safe}</div>
   </div>`;
+
+  const instEntries = Object.entries(data.instruments);
+  if (instEntries.length) {
+    for (const [inst, d] of instEntries) {
+      const instColor = wlMap[inst] || 'var(--t2)';
+      const trendArrow = d.trend === 'UP' ? '↑' : d.trend === 'DOWN' ? '↓' : '→';
+      const trendColor = d.trend === 'UP' ? 'var(--green)' : d.trend === 'DOWN' ? 'var(--red)' : 'var(--amber)';
+      const zapHtml = d.zapalnik ? `
+        <div style="margin-top:8px;padding:7px 10px;background:rgba(255,61,85,0.06);border-left:2px solid var(--red);border-radius:5px;font-size:10px;color:var(--red)">
+          🚨 ZAPALNIK: ${d.zapalnik}
+        </div>` : '';
+      html += `
+      <div class="card" id="sent-inst-${inst}" style="border-left:3px solid ${instColor};margin-bottom:8px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+          <span style="font-family:var(--mono);font-size:14px;font-weight:700;color:${instColor}">${inst}</span>
+          <div style="display:flex;gap:6px;align-items:center">
+            <span class="badge ${sentClass(d.sentiment)}">${d.sentiment}</span>
+            <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${signalColor(d.signal)}">${d.signal}</span>
+            <span style="font-family:var(--mono);font-size:9px;color:var(--t3)">Score: ${d.score}</span>
+            <span style="font-size:11px;color:${trendColor}">${trendArrow}</span>
+            <span style="font-family:var(--mono);font-size:9px;color:var(--t3)">Risk: ${d.risk}/10</span>
+          </div>
+        </div>
+        <div style="font-size:12px;color:var(--t2);line-height:1.6">${d.reason}</div>
+        ${zapHtml}
+      </div>`;
+    }
+  } else {
+    const safe = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    html += `<div class="card" style="border-left:3px solid ${oc}"><div style="font-size:12px;color:var(--t2);white-space:pre-wrap;line-height:1.8;font-family:var(--mono)">${safe}</div></div>`;
+  }
+
+  if (data.plan_dnia.length) {
+    html += `<div class="plan-card"><div class="plan-title">📋 Plan Dnia</div>`;
+    data.plan_dnia.forEach((step, i) => {
+      html += `<div class="plan-step"><span class="plan-num">${i+1}.</span><div>${step}</div></div>`;
+    });
+    html += `</div>`;
+  }
+
+  if (data.setup_alert) {
+    html += `
+    <div class="alert-pulse ok">
+      <div class="ap-dot"></div>
+      <div class="ap-text"><strong>🎯 POTENCJALNY SETUP:</strong> ${data.setup_alert}</div>
+    </div>`;
+  }
+
+  results.innerHTML = html;
 }
 
 function updateDashboardSentimentText(text) {
   if (!text) return;
-  const overallMatch = text.match(/OGOLNY NASTOJ:\s*(RISK-ON|RISK-OFF|MIXED)/i);
-  const overall = overallMatch ? overallMatch[1] : null;
-  const reasonMatch = text.match(/POWOD:\s*(.+)/i);
-  const reason = reasonMatch ? reasonMatch[1].trim() : '';
+  const data = parseSentinelText(text);
+  const sentColor = s => s==='BULLISH'?'var(--green)':s==='BEARISH'?'var(--red)':'var(--amber)';
+  const sentClassFill = s => s==='BULLISH'?'sf-bull':s==='BEARISH'?'sf-bear':'sf-neut';
+  const sentInstCls = s => s==='BULLISH'?'sent-bull':s==='BEARISH'?'sent-bear':'sent-neut';
+  for (const [inst, d] of Object.entries(data.instruments)) {
+    const fill = document.getElementById('sm-fill-' + inst);
+    const tag  = document.getElementById('sm-tag-'  + inst);
+    if (fill) { fill.className = 'sm-fill ' + sentClassFill(d.sentiment); fill.style.width = d.score + '%'; }
+    if (tag)  { tag.textContent = d.sentiment.substring(0,4); tag.style.color = sentColor(d.sentiment); }
+    const sentEl    = document.getElementById('ds-sent-'     + inst);
+    const trendEl   = document.getElementById('ds-trend-'    + inst);
+    const riskEl    = document.getElementById('ds-risk-'     + inst);
+    const riskLblEl = document.getElementById('ds-risk-lbl-' + inst);
+    const insightEl = document.getElementById('ds-insight-'  + inst);
+    if (sentEl) { sentEl.className = 'inst-sent ' + sentInstCls(d.sentiment); sentEl.textContent = d.sentiment?.substring(0,4) || '—'; }
+    if (trendEl) {
+      const arrows = {UP:'↑', DOWN:'↓', SIDEWAYS:'→'};
+      const colors = {UP:'var(--green)', DOWN:'var(--red)', SIDEWAYS:'var(--amber)'};
+      trendEl.textContent = arrows[d.trend] || '→';
+      trendEl.style.color = colors[d.trend] || 'var(--amber)';
+    }
+    if (riskEl && d.risk) { riskEl.style.width = Math.round(((d.risk - 1) / 9) * 100) + '%'; }
+    if (riskLblEl) riskLblEl.textContent = d.risk ? d.risk + '/10' : '—';
+    if (insightEl) {
+      insightEl.textContent = d.zapalnik ? '🚨 ' + d.zapalnik : (d.reason ? d.reason.split('.')[0] : '—');
+      insightEl.style.color = d.zapalnik ? 'var(--red)' : 'var(--t3)';
+    }
+  }
   const sentMain  = document.getElementById('sent-main');
   const sentIco   = sentMain?.querySelector('.sent-ico');
   const sentTitle = sentMain?.querySelector('.sent-title');
   const sentBody  = document.getElementById('sent-main-body');
-  if (sentMain && overall) {
-    sentMain.className = overall === 'RISK-ON' ? 'sentinel-alert ok'
-      : overall === 'MIXED' ? 'sentinel-alert warn' : 'sentinel-alert';
+  const sentInst2 = document.getElementById('sent-main-inst');
+  if (sentMain && data.overall) {
+    sentMain.className = data.overall === 'RISK-ON' ? 'sentinel-alert ok'
+      : data.overall === 'MIXED' ? 'sentinel-alert warn' : 'sentinel-alert';
   }
-  if (sentIco && overall)   sentIco.textContent   = overall === 'RISK-ON' ? '✅' : overall === 'MIXED' ? '⚠️' : '🔴';
-  if (sentTitle && overall) sentTitle.textContent = `${overall} — ${reason}`;
-  if (sentBody) sentBody.innerHTML = reason || text.split('\n').slice(0, 3).join(' ');
+  if (sentIco && data.overall) sentIco.textContent = data.overall === 'RISK-ON' ? '✅' : data.overall === 'MIXED' ? '⚠️' : '🔴';
+  if (sentTitle && data.overall) sentTitle.textContent = `${data.overall} — ${data.reason}`;
+  if (sentBody) {
+    const zapLines = Object.entries(data.instruments)
+      .filter(([, d]) => d.zapalnik).map(([inst, d]) => `🚨 <strong>${inst}:</strong> ${d.zapalnik}`).join('<br>');
+    if (data.setup_alert) sentBody.innerHTML = `<strong>🎯 Setup wykryty:</strong> ${data.setup_alert}`;
+    else if (zapLines) sentBody.innerHTML = zapLines;
+    else if (data.plan_dnia.length) sentBody.innerHTML = data.plan_dnia[0];
+    else sentBody.innerHTML = 'Brak aktywnych zapalnikow fundamentalnych.';
+  }
+  if (sentInst2) {
+    const wlMap = {}; getWatchlist().forEach(x => wlMap[x.sym] = x.color);
+    const sentClassBadge = s => s==='BULLISH'?'b-bull':s==='BEARISH'?'b-bear':'b-neut';
+    sentInst2.innerHTML = Object.entries(data.instruments).map(([inst, d]) => {
+      const color = wlMap[inst] || 'var(--t2)';
+      return `<span class="sent-tag ${sentClassBadge(d.sentiment)}" style="color:${color}">${inst}</span>`;
+    }).join('');
+  }
 }
 
 function updateDashboardSentiment(data) {
