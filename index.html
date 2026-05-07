@@ -2328,7 +2328,7 @@ function switchTo(id) {
   document.getElementById('fab').classList.toggle('hidden', id !== 'journal' && id !== 'dashboard');
   if (id === 'dashboard')   { renderDashboardInstruments(); refreshDashboard(); applyWeekendMode(); }
   if (id === 'scanner')     scannerRefreshInstruments();
-  if (id === 'sentinel')    applyWeekendMode();
+  if (id === 'sentinel')    { applyWeekendMode(); restoreSentinel(); }
   if (id === 'raporty')     renderReportsSection();
   if (id === 'ustawienia')  renderCacheStatus();
   if (id === 'newsy') {
@@ -3935,6 +3935,8 @@ function parseReportData(data) {
 
 function refreshDashboard() {
   const best = getDashboardData();
+  console.log('[Dashboard] refreshDashboard — tj_sentinel:', localStorage.getItem('tj_sentinel')?.substring(0,80) || 'null');
+  console.log('[Dashboard] best source:', best ? `${best.source} ts=${new Date(best.ts).toLocaleTimeString()}` : 'none');
   if (!best) return;
   const parsed   = best.type === 'sentinel' ? parseSentinelText(best.text) : parseReportData(best.data);
   const isStale  = (Date.now() - best.ts) > 4 * 3600 * 1000;
@@ -3946,6 +3948,45 @@ function refreshDashboard() {
   const sentClassFill = s => s==='BULLISH'?'sf-bull':s==='BEARISH'?'sf-bear':'sf-neut';
   const sentInstCls   = s => s==='BULLISH'?'sent-bull':s==='BEARISH'?'sent-bear':'sent-neut';
 
+  // ── Rebuild skeleton HTML first so the IDs exist before we populate them ──
+  const items = getWatchlist();
+  const meters  = document.getElementById('sent-meters');
+  const instList = document.getElementById('dashboard-inst-list');
+  const mainInst = document.getElementById('sent-main-inst');
+  if (meters) {
+    meters.innerHTML = items.map(item => `
+      <div class="sm-row">
+        <span class="sm-lbl" style="color:${item.color}">${item.sym}</span>
+        <div class="sm-track"><div class="sm-fill sf-neut" id="sm-fill-${item.sym}" style="width:50%"></div></div>
+        <span class="sm-tag" id="sm-tag-${item.sym}" style="color:var(--amber)">NEUT</span>
+      </div>`).join('');
+  }
+  if (instList) {
+    instList.innerHTML = items.map(item => `
+      <div class="inst-row" onclick="switchTo('sentinel')">
+        <div class="inst-ico" style="background:${item.color}22;color:${item.color};border-radius:8px">${item.sym.substring(0,3)}</div>
+        <div class="inst-info">
+          <div class="inst-name"><span class="inst-trend" id="ds-trend-${item.sym}">→</span> ${item.sym}</div>
+          <div class="inst-sub">${item.name}</div>
+          <div class="risk-bar-wrap">
+            <span style="font-family:var(--mono);font-size:8px;color:var(--t3);white-space:nowrap">RISK</span>
+            <div class="risk-bar-track"><div class="risk-bar-fill" id="ds-risk-${item.sym}" style="width:40%"></div></div>
+            <span class="risk-lbl" id="ds-risk-lbl-${item.sym}">—</span>
+          </div>
+          <div class="inst-insight" id="ds-insight-${item.sym}">Uruchom Sentinel</div>
+        </div>
+        <div class="inst-right">
+          <div class="inst-sent sent-neut" id="ds-sent-${item.sym}">NEUT</div>
+        </div>
+      </div>`).join('');
+  }
+  if (mainInst) {
+    mainInst.innerHTML = items.slice(0, 4).map(item =>
+      `<span class="sent-tag b-neut" style="color:${item.color}">${item.sym}</span>`
+    ).join('');
+  }
+
+  // ── Now populate the freshly-created elements with parsed data ──
   for (const [inst, d] of Object.entries(parsed.instruments)) {
     const fill      = document.getElementById('sm-fill-'    + inst);
     const tag       = document.getElementById('sm-tag-'     + inst);
@@ -4005,42 +4046,6 @@ function refreshDashboard() {
     staleEl?.remove();
   }
 
-  const items = getWatchlist();
-  const meters = document.getElementById('sent-meters');
-  const instList = document.getElementById('dashboard-inst-list');
-  const mainInst = document.getElementById('sent-main-inst');
-  if (meters) {
-    meters.innerHTML = items.map(item => `
-      <div class="sm-row">
-        <span class="sm-lbl" style="color:${item.color}">${item.sym}</span>
-        <div class="sm-track"><div class="sm-fill sf-neut" id="sm-fill-${item.sym}" style="width:50%"></div></div>
-        <span class="sm-tag" id="sm-tag-${item.sym}" style="color:var(--amber)">NEUT</span>
-      </div>`).join('');
-  }
-  if (instList) {
-    instList.innerHTML = items.map(item => `
-      <div class="inst-row" onclick="switchTo('sentinel')">
-        <div class="inst-ico" style="background:${item.color}22;color:${item.color};border-radius:8px">${item.sym.substring(0,3)}</div>
-        <div class="inst-info">
-          <div class="inst-name"><span class="inst-trend" id="ds-trend-${item.sym}">→</span> ${item.sym}</div>
-          <div class="inst-sub">${item.name}</div>
-          <div class="risk-bar-wrap">
-            <span style="font-family:var(--mono);font-size:8px;color:var(--t3);white-space:nowrap">RISK</span>
-            <div class="risk-bar-track"><div class="risk-bar-fill" id="ds-risk-${item.sym}" style="width:40%"></div></div>
-            <span class="risk-lbl" id="ds-risk-lbl-${item.sym}">—</span>
-          </div>
-          <div class="inst-insight" id="ds-insight-${item.sym}">Uruchom Sentinel</div>
-        </div>
-        <div class="inst-right">
-          <div class="inst-sent sent-neut" id="ds-sent-${item.sym}">NEUT</div>
-        </div>
-      </div>`).join('');
-  }
-  if (mainInst) {
-    mainInst.innerHTML = items.slice(0, 4).map(item =>
-      `<span class="sent-tag b-neut" style="color:${item.color}">${item.sym}</span>`
-    ).join('');
-  }
   refreshInstrumentDropdown();
 }
 
