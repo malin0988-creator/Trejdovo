@@ -2130,6 +2130,106 @@ async function getLatestPerplexityNews() {
   return cache?.lines?.join('\n') || '';
 }
 
+// ─── INTELLIGENT PREFETCH FUNCTIONS ──────────────────────────────────────────
+
+async function fetchMorningBrief() {
+  if (_prefetchedSlots.has('morning')) return;
+  _prefetchedSlots.add('morning');
+  if (!(localStorage.getItem('perplexity_api_key') || PERPLEXITY_API_KEY)) return;
+  try {
+    const syms = getWatchlist().map(x => x.sym).join(', ');
+    const text = await callPerplexity(
+      `Asian session summary overnight: key moves in ${syms}, economic data from Asia/Australia, geopolitical news, risk sentiment heading into London open. Last 8 hours. 12 items max.`
+    );
+    if (text) {
+      localStorage.setItem('tj_morning_brief', JSON.stringify({text, ts: Date.now()}));
+      const lines = text.split('\n').filter(l => l.trim().length > 10).slice(0, 12);
+      if (lines.length) setNewsCache(lines);
+    }
+  } catch(e) { console.warn('[MorningBrief]', e.message); }
+}
+
+async function fetchPreReportNews(slotKey, query) {
+  if (_prefetchedSlots.has(slotKey)) return;
+  _prefetchedSlots.add(slotKey);
+  if (!(localStorage.getItem('perplexity_api_key') || PERPLEXITY_API_KEY)) return;
+  try {
+    const text = await callPerplexity(query);
+    if (text) {
+      localStorage.setItem('tj_prefetch_' + slotKey, JSON.stringify({text, ts: Date.now()}));
+      const lines = text.split('\n').filter(l => l.trim().length > 10).slice(0, 12);
+      if (lines.length) setNewsCache(lines);
+    }
+  } catch(e) { console.warn('[PreReportNews ' + slotKey + ']', e.message); }
+}
+
+async function fetchEventPreview(event) {
+  const key = event.title + '_preview';
+  if (_eventPreviewsFired.has(key)) return;
+  _eventPreviewsFired.add(key);
+  if (!(localStorage.getItem('perplexity_api_key') || PERPLEXITY_API_KEY)) return;
+  try {
+    const syms = getWatchlist().map(x => x.sym).join(', ');
+    const text = await callPerplexity(
+      `Preview (releasing in 5 min): ${event.title}. Forecast: ${event.forecast || 'n/a'}. Market expectations, beat vs miss scenarios, likely impact on ${syms}.`
+    );
+    if (text) {
+      const ctx = _getEventContext();
+      ctx[key] = {text, ts: Date.now(), type: 'preview'};
+      localStorage.setItem('tj_event_context', JSON.stringify(ctx));
+      const cache = getNewsCache();
+      const headline = `[PREVIEW T-5] ${event.title} (fcst ${event.forecast || '?'}): ${text.slice(0, 120)}`;
+      const lines = [headline, ...(cache?.lines || [])].slice(0, 15);
+      setNewsCache(lines);
+    }
+  } catch(e) { console.warn('[EventPreview]', e.message); }
+}
+
+async function fetchEventActual(event) {
+  const key = event.title + '_actual';
+  if (_eventActualsFired.has(key)) return;
+  _eventActualsFired.add(key);
+  if (!(localStorage.getItem('perplexity_api_key') || PERPLEXITY_API_KEY)) return;
+  try {
+    await refreshCalendarActuals();
+    const syms = getWatchlist().map(x => x.sym).join(', ');
+    const live = calendarData.find(e => e.title === event.title);
+    const actualStr = live?.actual ? `Actual: ${live.actual}, Forecast: ${event.forecast || 'n/a'}` : `Forecast: ${event.forecast || 'n/a'} — actual not yet confirmed`;
+    const text = await callPerplexity(
+      `Actual result just released: ${event.title}. ${actualStr}. Immediate market reaction and impact on ${syms}? Beat or miss?`
+    );
+    if (text) {
+      const ctx = _getEventContext();
+      ctx[key] = {text, ts: Date.now(), type: 'actual'};
+      localStorage.setItem('tj_event_context', JSON.stringify(ctx));
+      const cache = getNewsCache();
+      const headline = `[ACTUAL T+2] ${event.title}: ${text.slice(0, 120)}`;
+      const lines = [headline, ...(cache?.lines || [])].slice(0, 15);
+      setNewsCache(lines);
+    }
+  } catch(e) { console.warn('[EventActual]', e.message); }
+}
+
+function _getEventContext() {
+  try { return JSON.parse(localStorage.getItem('tj_event_context')) || {}; } catch { return {}; }
+}
+
+function getPrefetchedContext(slotId) {
+  const maxAge = 90 * 60 * 1000;
+  const now = Date.now();
+  try {
+    if (slotId === 'r0') {
+      const mb = JSON.parse(localStorage.getItem('tj_morning_brief'));
+      if (mb?.text && (now - mb.ts) < maxAge) return mb.text;
+    }
+    if (slotId === 'r1' || slotId === 'r2') {
+      const pf = JSON.parse(localStorage.getItem('tj_prefetch_' + slotId));
+      if (pf?.text && (now - pf.ts) < maxAge) return pf.text;
+    }
+  } catch {}
+  return null;
+}
+
 function buildTodayContext(newsLines, perplexityNews, prices) {
   const now     = new Date();
   const dateStr = now.toLocaleDateString('pl', {timeZone:'Europe/London', weekday:'long', year:'numeric', month:'long', day:'numeric'});
@@ -2934,12 +3034,12 @@ async function generateReport(slotId) {
   const loadEl   = document.getElementById('rpt-loading-' + slotId);
   const blockEl  = document.getElementById('rpt-block-'   + slotId);
   const btn      = blockEl?.querySelector('button[onclick^="generateReport"]');
-  if (btn) { btn.disabled = true; btn.textContent = 'Pobieram newsy…'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Przygotowuję dane…'; }
   if (loadEl) loadEl.style.display = 'block';
   try {
-    const [pxNews, prices] = await Promise.all([
-      getLatestPerplexityNews(), fetchCurrentPrices(),
-    ]);
+    const prefetched = getPrefetchedContext(slotId);
+    const [prices] = await Promise.all([fetchCurrentPrices()]);
+    const pxNews = prefetched || await getLatestPerplexityNews();
     await refreshCalendarActuals();
     _validatorNewsLines  = [];
     _validatorPerplexity = pxNews;
@@ -3543,6 +3643,9 @@ async function requestPush() {
 
 // ─── SCHEDULED ALERTS ───
 let _lastAlertMin = -1;
+const _prefetchedSlots    = new Set(); // prevent duplicate prefetches per session
+const _eventPreviewsFired = new Set(); // T-5 event preview keys fired this session
+const _eventActualsFired  = new Set(); // T+2 event actual keys fired this session
 
 function checkScheduledAlerts() {
   const uk = new Date(new Date().toLocaleString('en-US', {timeZone:'Europe/London'}));
@@ -3576,10 +3679,46 @@ function checkScheduledAlerts() {
   const rt = getReportTimes();
   function parseTM(t) { const [hh,mm] = (t||'99:99').split(':').map(Number); return hh*60+mm; }
 
-  // Pre-report news fetch (5 min before each scheduled report)
-  if (isWithinTradingHours()) {
-    for (const slot of REPORT_SLOTS) {
-      if (nowMin === parseTM(rt[slot.id]) - 5) { loadNews(false); break; }
+  // ── INTELLIGENT PREFETCH SCHEDULE ──────────────────────────────────────────
+
+  // 06:00: Morning brief — Asian session summary for r0 (07:00 report)
+  if (h === 6 && m === 0) fetchMorningBrief();
+
+  // 06:59: clear daily prefetch dedup so new day can refetch
+  if (h === 6 && m === 59) {
+    _prefetchedSlots.delete('r1');
+    _prefetchedSlots.delete('r2');
+    _prefetchedSlots.delete('morning');
+    localStorage.removeItem('tj_prefetch_r1');
+    localStorage.removeItem('tj_prefetch_r2');
+  }
+
+  // Pre-report prefetch: r1 at T-5min (forward-looking query)
+  if (nowMin === parseTM(rt.r1) - 5) {
+    const syms = getWatchlist().map(x => x.sym).join(', ');
+    fetchPreReportNews('r1',
+      `Current market state for US session open (${rt.r1} UK). Key developments for ${syms} last 2 hours: price action, macro data, news flow. What should traders watch?`
+    );
+  }
+
+  // Post-data prefetch: r2 at T-5min (pre-report standard)
+  if (nowMin === parseTM(rt.r2) - 5) {
+    const syms = getWatchlist().map(x => x.sym).join(', ');
+    fetchPreReportNews('r2',
+      `Post-data US session update for ${syms}: macro data released 14:30 UK, actual vs forecast, immediate market reaction. Direction for next 2 hours?`
+    );
+  }
+
+  // ── HIGH-IMPACT EVENT MONITORING (T-5 preview / T+2 actual) ───────────────
+
+  if (isWithinTradingHours() && calendarData.length) {
+    const nowMs = Date.now();
+    for (const event of calendarData) {
+      if (event.impact !== 'High') continue;
+      const eMs   = new Date(event.date).getTime();
+      const diffM = Math.round((eMs - nowMs) / 60000);
+      if (diffM === 5 && !event.actual)      fetchEventPreview(event);
+      if (diffM === -2)                       fetchEventActual(event);
     }
   }
 
