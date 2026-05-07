@@ -2124,7 +2124,7 @@ function switchTo(id) {
   if (id === 'scanner')   scannerRefreshInstruments();
   if (id === 'sentinel')  applyWeekendMode();
   if (id === 'raporty')   renderReportsSection();
-  if (id === 'newsy' && Date.now() - lastNewsLoad > 300000) loadNews();
+  if (id === 'newsy') loadNews();
 }
 
 // ─── API KEY ───
@@ -2878,101 +2878,166 @@ async function generateReport(slotId) {
 }
 
 // ─── NEWS ANALYSIS ───
+// ─── NEWS SYSTEM ─────────────────────────────────────────────────────────────
 let lastNewsLoad = 0;
+let _newsRefreshTimer = null;
 
-async function loadNews() {
+function isWithinTradingHours() {
+  const uk = new Date(new Date().toLocaleString('en-US', {timeZone:'Europe/London'}));
+  const d = uk.getDay(), h = uk.getHours();
+  return d >= 1 && d <= 5 && h >= 7 && h < 17;
+}
+
+function getNewsCache() {
+  try { const c = JSON.parse(localStorage.getItem('tj_news_cache')); return (c?.lines?.length && c.ts) ? c : null; }
+  catch { return null; }
+}
+
+function setNewsCache(lines) {
+  try { localStorage.setItem('tj_news_cache', JSON.stringify({lines, ts: Date.now()})); } catch {}
+}
+
+function _newsDotColor(t) {
+  const s = t.toLowerCase();
+  if (/\b(fed|fomc|rate|inflation|cpi|pce|interest)\b/.test(s)) return 'var(--red)';
+  if (/\b(oil|opec|crude|energy)\b/.test(s))                    return 'var(--amber)';
+  if (/\b(gold|silver|haven|safe)\b/.test(s))                   return 'var(--green)';
+  if (/\b(bitcoin|crypto|btc|eth)\b/.test(s))                   return 'var(--gold)';
+  if (/\b(war|conflict|geopolit|sanction|attack)\b/.test(s))    return 'var(--red)';
+  return 'var(--t3)';
+}
+
+function _newsImpactTags(headline) {
+  return getWatchlist()
+    .filter(item => isEventRelevantTo(item.sym, headline, ''))
+    .map(item => `<span style="background:${item.color}22;color:${item.color};font-size:9px;font-weight:700;font-family:var(--mono);padding:1px 5px;border-radius:3px;border:1px solid ${item.color}44;margin-left:4px">${item.sym}</span>`)
+    .join('');
+}
+
+function _parseNewsLine(line) {
+  const srcMatch  = line.match(/^\[([^\]]{1,30})\]\s+(.*)/);
+  const srcMatch2 = line.match(/^(Reuters|Bloomberg|WSJ|CNBC|FT|BBC|AP|MarketWatch|Investing\.com|CNN|Guardian|CNBC)[:\-–]\s+(.*)/i);
+  if (srcMatch)  return {source: srcMatch[1],  headline: srcMatch[2]};
+  if (srcMatch2) return {source: srcMatch2[1], headline: srcMatch2[3]};
+  return {source: 'AI News', headline: line};
+}
+
+function renderNewsList(lines, fetchTs, isStale, isClosed) {
   const container = document.getElementById('news-feed-list');
   const badge     = document.getElementById('news-feed-badge');
   const updated   = document.getElementById('news-updated');
   if (!container) return;
-
-  const rssUrl   = 'https://feeds.finance.yahoo.com/rss/2.0/headline?s=SPY,QQQ,GC=F,CL=F,BTC-USD&region=US&lang=en-US&count=20';
-  const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(rssUrl);
-
-  const dotColor = title => {
-    const t = title.toLowerCase();
-    if (t.includes('fed') || t.includes('rate') || t.includes('inflation')) return 'var(--red)';
-    if (t.includes('oil') || t.includes('opec') || t.includes('energy'))   return 'var(--amber)';
-    if (t.includes('gold') || t.includes('dollar') || t.includes('haven')) return 'var(--green)';
-    if (t.includes('bitcoin') || t.includes('crypto') || t.includes('btc')) return 'var(--gold)';
-    return 'var(--t3)';
-  };
-
-  const renderRssItems = items => items.map(item => {
-    const title   = item.querySelector('title')?.textContent || '';
-    const pubDate = item.querySelector('pubDate')?.textContent || '';
-    const timeStr = pubDate
-      ? new Date(pubDate).toLocaleTimeString('pl', {hour:'2-digit', minute:'2-digit', timeZone:'Europe/London'})
-      : '—';
+  const tsStr = fetchTs ? new Date(fetchTs).toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'}) : '—';
+  if (isClosed)      { if (badge) { badge.textContent = '🔴 ZAMKNIĘTY'; badge.className = 'badge b-off'; } }
+  else if (isStale)  { if (badge) { badge.textContent = '⚠ CACHE';     badge.className = 'badge b-warn'; } }
+  else               { if (badge) { badge.textContent = '● PERPLEXITY'; badge.className = 'badge b-live'; } }
+  if (updated) updated.textContent = `${isClosed ? 'Rynek zamknięty · ' : ''}Aktualizacja: ${tsStr} UK${isStale ? ' (cache)' : ''}`;
+  container.innerHTML = lines.map(line => {
+    const {source, headline} = _parseNewsLine(line);
+    const tags = _newsImpactTags(headline);
+    const col  = _newsDotColor(headline);
     return `<div class="news-item">
-      <div class="news-dot" style="background:${dotColor(title)}"></div>
+      <div class="news-dot" style="background:${col}"></div>
       <div>
-        <div class="news-hl">${title}</div>
-        <div class="news-meta"><span>${timeStr} UK</span><span class="ni-med">NEWS</span></div>
+        <div class="news-hl">${headline}</div>
+        <div class="news-meta"><span>${tsStr} UK</span><span class="ni-med" style="color:var(--purple)">${source}</span>${tags}</div>
       </div>
     </div>`;
   }).join('');
+}
 
-  // ── Try RSS feed with a strict 10-second timeout ──
-  let rssOk = false;
-  try {
-    const ctrl  = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 10000);
-    const resp  = await fetch(proxyUrl, {signal: ctrl.signal});
-    clearTimeout(timer);
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const text  = await resp.text();
-    const xml   = new DOMParser().parseFromString(text, 'text/xml');
-    const items = Array.from(xml.querySelectorAll('item')).slice(0, 12);
-    if (!items.length) throw new Error('feed_empty');
-    container.innerHTML = renderRssItems(items);
-    lastNewsLoad = Date.now();
-    if (badge)   { badge.textContent = '● LIVE'; badge.className = 'badge b-live'; }
-    if (updated) updated.textContent = 'Aktualizacja: ' + new Date().toLocaleTimeString('pl', {timeZone:'Europe/London', hour:'2-digit', minute:'2-digit'});
-    rssOk = true;
-  } catch {}
-
-  if (rssOk) return;
-
-  // ── RSS failed — try Perplexity AI fallback ──
+async function loadNews(showLoading = true) {
+  const container = document.getElementById('news-feed-list');
+  const badge     = document.getElementById('news-feed-badge');
+  if (!container) return;
   const hasPxKey = !!(localStorage.getItem('perplexity_api_key') || PERPLEXITY_API_KEY);
-  if (hasPxKey) {
-    if (badge) { badge.textContent = '⟳ AI'; badge.className = 'badge b-warn'; }
-    container.innerHTML = '<div style="color:var(--t3);font-size:11px;padding:12px 0;text-align:center">Feed RSS niedostępny — pobieram z Perplexity AI…</div>';
-    const pxText = await callPerplexity(
-      'Latest financial market news in the last 2 hours. List 10 key headlines for: forex (EUR/USD, GBP/USD), commodities (oil, gold), crypto (bitcoin, ethereum), and major indices (Nasdaq, S&P 500). One clear headline per line, no numbering.'
-    );
-    if (pxText) {
-      const lines = pxText.split('\n')
-        .map(l => l.replace(/^[\d\-\*\.\s]+/, '').trim())
-        .filter(l => l.length > 15)
-        .slice(0, 10);
-      if (lines.length) {
-        const now = new Date().toLocaleTimeString('pl', {hour:'2-digit', minute:'2-digit', timeZone:'Europe/London'});
-        container.innerHTML = lines.map(line => `<div class="news-item">
-          <div class="news-dot" style="background:${dotColor(line)}"></div>
-          <div>
-            <div class="news-hl">${line}</div>
-            <div class="news-meta"><span>${now} UK</span><span class="ni-med" style="color:var(--purple)">PERPLEXITY AI</span></div>
-          </div>
-        </div>`).join('');
-        lastNewsLoad = Date.now();
-        if (badge)   { badge.textContent = '● AI'; badge.className = 'badge b-live'; }
-        if (updated) updated.textContent = 'Perplexity AI · ' + now;
-        return;
-      }
+
+  if (!isWithinTradingHours()) {
+    const cache = getNewsCache();
+    if (cache) { renderNewsList(cache.lines, cache.ts, true, true); }
+    else {
+      if (badge) { badge.textContent = '🔴 ZAMKNIĘTY'; badge.className = 'badge b-off'; }
+      const upEl = document.getElementById('news-updated');
+      if (upEl) upEl.textContent = 'Rynek zamknięty (07:00–17:00 UK)';
+      container.innerHTML = `<div style="text-align:center;padding:24px 0;color:var(--t3)">
+        <div style="font-size:24px;margin-bottom:8px">🔴</div>
+        <div style="font-size:12px;font-weight:600;color:var(--t2)">Rynek zamknięty</div>
+        <div style="font-size:10px;margin-top:4px">Godziny: 07:00–17:00 UK · Newsy automatycznie po otwarciu</div>
+      </div>`;
     }
+    return;
   }
 
-  // ── Both sources failed — show error ──
-  container.innerHTML = `
-    <div style="text-align:center;padding:20px 0;color:var(--t3)">
-      <div style="font-size:18px;margin-bottom:6px">📡</div>
-      <div style="font-size:12px;font-weight:600;color:var(--t2)">Newsy chwilowo niedostępne</div>
-      <button class="btn-primary" style="width:auto;padding:6px 14px;font-size:10px;margin:10px 0 0"
-        onclick="this.disabled=true;this.textContent='Ładuję…';loadNews()">↻ Spróbuj ponownie</button>
-    </div>`;
-  if (badge) { badge.textContent = 'Offline'; badge.className = 'badge b-off'; }
+  if (!hasPxKey) { await _loadNewsRssFallback(); return; }
+
+  const cache = getNewsCache();
+  if (cache && (Date.now() - cache.ts) < 25 * 60 * 1000 && !showLoading) return;
+
+  if (showLoading) {
+    if (badge) { badge.textContent = '⟳ AI'; badge.className = 'badge b-warn'; }
+    container.innerHTML = '<div style="color:var(--t3);font-size:11px;padding:12px 0;text-align:center">Pobieram aktualne newsy z Perplexity AI…</div>';
+  }
+
+  try {
+    const syms   = getWatchlist().map(x => x.sym).join(', ');
+    const pxText = await callPerplexity(
+      `Latest financial market news last 30 minutes for ${syms} — include price movements, geopolitical events, central bank news, economic data releases. Search financial news sites and social media. Format each item as: [SOURCE] headline text. 12-15 items, be concise.`
+    );
+    if (!pxText) throw new Error('empty');
+    const lines = pxText.split('\n').map(l => l.replace(/^[\d\-\*\•\.\s]+/, '').trim()).filter(l => l.length > 15).slice(0, 15);
+    if (!lines.length) throw new Error('no lines');
+    setNewsCache(lines);
+    lastNewsLoad = Date.now();
+    renderNewsList(lines, Date.now(), false, false);
+  } catch(e) {
+    const cached = getNewsCache();
+    if (cached) { renderNewsList(cached.lines, cached.ts, true, false); }
+    else {
+      container.innerHTML = `<div style="text-align:center;padding:20px 0;color:var(--t3)">
+        <div style="font-size:18px;margin-bottom:6px">📡</div>
+        <div style="font-size:12px;font-weight:600;color:var(--t2)">Newsy niedostępne</div>
+        <div style="font-size:10px;margin-top:4px">${e.message}</div>
+        <button class="btn-primary" style="width:auto;padding:6px 14px;font-size:10px;margin:10px 0 0"
+          onclick="this.disabled=true;this.textContent='Ładuję…';loadNews()">↻ Spróbuj ponownie</button>
+      </div>`;
+      if (badge) { badge.textContent = 'Offline'; badge.className = 'badge b-off'; }
+    }
+  }
+}
+
+async function _loadNewsRssFallback() {
+  const container = document.getElementById('news-feed-list');
+  const badge     = document.getElementById('news-feed-badge');
+  if (badge) { badge.textContent = '⟳ RSS'; badge.className = 'badge b-warn'; }
+  const proxyUrl = 'https://api.allorigins.win/raw?url=' + encodeURIComponent('https://feeds.finance.yahoo.com/rss/2.0/headline?s=SPY,QQQ,GC=F,CL=F,BTC-USD&region=US&lang=en-US&count=20');
+  try {
+    const ctrl  = new AbortController();
+    setTimeout(() => ctrl.abort(), 10000);
+    const resp  = await fetch(proxyUrl, {signal: ctrl.signal});
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const xml   = new DOMParser().parseFromString(await resp.text(), 'text/xml');
+    const items = Array.from(xml.querySelectorAll('item')).slice(0, 12);
+    if (!items.length) throw new Error('empty feed');
+    const lines = items.map(item => '[Yahoo Finance] ' + (item.querySelector('title')?.textContent || ''));
+    setNewsCache(lines);
+    lastNewsLoad = Date.now();
+    renderNewsList(lines, Date.now(), false, false);
+  } catch {
+    const cache = getNewsCache();
+    if (cache) { renderNewsList(cache.lines, cache.ts, true, false); }
+    else {
+      if (container) container.innerHTML = `<div style="text-align:center;padding:20px 0;color:var(--t3)">
+        <div style="font-size:12px;font-weight:600;color:var(--t2)">Newsy niedostępne</div>
+        <div style="font-size:10px;margin-top:4px">Skonfiguruj klucz Perplexity w zakładce Config</div>
+      </div>`;
+      if (badge) { badge.textContent = 'Offline'; badge.className = 'badge b-off'; }
+    }
+  }
+}
+
+function startNewsAutoRefresh() {
+  if (_newsRefreshTimer) clearInterval(_newsRefreshTimer);
+  _newsRefreshTimer = setInterval(() => { if (isWithinTradingHours()) loadNews(false); }, 30 * 60 * 1000);
 }
 
 function buildNewsSystem() {
@@ -3421,9 +3486,17 @@ function checkScheduledAlerts() {
     showNotif('📸 Trejdovo', {body: 'Friday Close Snapshot zapisany. Dobrego weekendu!'});
   }
 
-  if (!ANTHROPIC_API_KEY) return;
   const rt = getReportTimes();
   function parseTM(t) { const [hh,mm] = (t||'99:99').split(':').map(Number); return hh*60+mm; }
+
+  // Pre-report news fetch (5 min before each scheduled report)
+  if (isWithinTradingHours()) {
+    for (const slot of REPORT_SLOTS) {
+      if (nowMin === parseTM(rt[slot.id]) - 5) { loadNews(false); break; }
+    }
+  }
+
+  if (!ANTHROPIC_API_KEY) return;
 
   for (const slot of REPORT_SLOTS) {
     const slotMin = parseTM(rt[slot.id]);
@@ -4403,6 +4476,7 @@ else refreshDashboard();
 renderReportsSection();
 startWlRefresh();
 rebuildAlerts();
+startNewsAutoRefresh();
 startBgNewsMonitor();
 // Request notification permission on first load (after short delay so page renders first)
 if ('Notification' in window && Notification.permission === 'default') {
