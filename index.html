@@ -1466,9 +1466,10 @@ body::before {
       Dodaj walor — Watchlist
       <button class="m-close" onclick="closeWlModal()">✕</button>
     </div>
-    <div class="form-grp">
+    <div class="form-grp" style="position:relative">
       <label class="form-lbl">Symbol (np. ETH, ES, AAPL, EUR/USD)</label>
-      <input class="f-input" type="text" id="wl-new-sym" placeholder="ETH, ES, AAPL, EURUSD..." oninput="wlSymInput(this)" autocomplete="off" autocapitalize="characters">
+      <input class="f-input" type="text" id="wl-new-sym" placeholder="Wpisz symbol lub nazwę…" oninput="wlSymInput(this)" autocomplete="off" autocapitalize="characters">
+      <div id="wl-suggestions" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:99;background:var(--bg3);border:1px solid var(--border);border-radius:6px;max-height:200px;overflow-y:auto;box-shadow:0 4px 16px #0006"></div>
     </div>
     <div class="form-grp">
       <label class="form-lbl">Nazwa (opcjonalnie)</label>
@@ -3826,6 +3827,11 @@ const WL_DEFAULTS = [
 const CRYPTO_SYMS = new Set(['BTC','ETH','SOL','BNB','XRP','DOGE','ADA','AVAX','LINK','DOT','LTC','MATIC','SHIB','UNI','ATOM']);
 const FUTURES_MAP = {NQ:'NQ=F',ES:'ES=F',CL:'CL=F',GOLD:'GC=F',GC:'GC=F',SI:'SI=F',NG:'NG=F',RTY:'RTY=F',YM:'YM=F',ZB:'ZB=F',ZN:'ZN=F'};
 const FOREX_SUBS  = {'EUR/USD':'EURUSD=X','GBP/USD':'GBPUSD=X','USD/JPY':'USDJPY=X','EUR/JPY':'EURJPY=X','AUD/USD':'AUDUSD=X','USD/CAD':'USDCAD=X'};
+const INDICES_MAP = {
+  DE40:'%5EGDAXI', DAX:'%5EGDAXI', UK100:'%5EFTSE', FTSE:'%5EFTSE',
+  FR40:'%5EFCHI',  CAC:'%5EFCHI',  JP225:'%5EN225', NIKKEI:'%5EN225',
+  HK50:'%5EHSI',   AUS200:'%5EAXJO', SPX:'%5EGSPC', NDX:'%5EIXIC',
+};
 const KNOWN_NAMES = {
   NQ:'Nasdaq Futures',ES:'S&P 500 Futures',CL:'Crude Oil WTI',GC:'Gold Futures',
   GOLD:'XAU / USD',SI:'Silver Futures',NG:'Natural Gas',RTY:'Russell 2000',YM:'Dow Futures',
@@ -3834,7 +3840,38 @@ const KNOWN_NAMES = {
   LINK:'Chainlink / USD',DOT:'Polkadot / USD',LTC:'Litecoin / USD',MATIC:'Polygon / USD',
   'EUR/USD':'Euro / Dollar','GBP/USD':'Pound / Dollar','USD/JPY':'Dollar / Yen',
   AAPL:'Apple Inc.',TSLA:'Tesla Inc.',MSFT:'Microsoft',AMZN:'Amazon',META:'Meta',NVDA:'Nvidia',
+  DE40:'DAX (Germany 40)',UK100:'FTSE 100',FR40:'CAC 40 (France)',JP225:'Nikkei 225',
+  HK50:'Hang Seng',AUS200:'ASX 200',SPX:'S&P 500 Index',NDX:'Nasdaq 100 Index',
 };
+
+// Predefined suggestions for the add-instrument search
+const WL_SUGGESTIONS = [
+  {sym:'NQ',      name:'Nasdaq Futures',       hint:'Yahoo: NQ=F'},
+  {sym:'ES',      name:'S&P 500 Futures',       hint:'Yahoo: ES=F'},
+  {sym:'CL',      name:'Crude Oil WTI',         hint:'Yahoo: CL=F'},
+  {sym:'GOLD',    name:'XAU / USD',             hint:'metals.live'},
+  {sym:'SI',      name:'Silver Futures',        hint:'Yahoo: SI=F'},
+  {sym:'NG',      name:'Natural Gas',           hint:'Yahoo: NG=F'},
+  {sym:'YM',      name:'Dow Futures',           hint:'Yahoo: YM=F'},
+  {sym:'RTY',     name:'Russell 2000',          hint:'Yahoo: RTY=F'},
+  {sym:'DE40',    name:'DAX (Germany 40)',       hint:'Yahoo: ^GDAXI'},
+  {sym:'UK100',   name:'FTSE 100',              hint:'Yahoo: ^FTSE'},
+  {sym:'FR40',    name:'CAC 40 (France)',        hint:'Yahoo: ^FCHI'},
+  {sym:'JP225',   name:'Nikkei 225',            hint:'Yahoo: ^N225'},
+  {sym:'BTC',     name:'Bitcoin / USD',         hint:'Binance'},
+  {sym:'ETH',     name:'Ethereum / USD',        hint:'Binance'},
+  {sym:'SOL',     name:'Solana / USD',          hint:'Binance'},
+  {sym:'BNB',     name:'BNB / USD',             hint:'Binance'},
+  {sym:'XRP',     name:'XRP / USD',             hint:'Binance'},
+  {sym:'AVAX',    name:'Avalanche / USD',       hint:'Binance'},
+  {sym:'EUR/USD', name:'Euro / Dollar',         hint:'Yahoo: EURUSD=X'},
+  {sym:'GBP/USD', name:'Pound / Dollar',        hint:'Yahoo: GBPUSD=X'},
+  {sym:'USD/JPY', name:'Dollar / Yen',          hint:'Yahoo: USDJPY=X'},
+  {sym:'AAPL',    name:'Apple Inc.',            hint:'Yahoo: AAPL'},
+  {sym:'NVDA',    name:'Nvidia',                hint:'Yahoo: NVDA'},
+  {sym:'TSLA',    name:'Tesla Inc.',            hint:'Yahoo: TSLA'},
+  {sym:'MSFT',    name:'Microsoft',             hint:'Yahoo: MSFT'},
+];
 
 function getWatchlist() {
   try { return JSON.parse(localStorage.getItem('tj_watchlist')) || WL_DEFAULTS; }
@@ -4066,7 +4103,10 @@ function renderWatchlist() {
       <button class="wl-remove" onclick="removeInstrument(${i})" title="Usuń">×</button>
       <div class="wl-top">
         <span class="wl-sym" style="color:${item.color}">${item.sym}</span>
-        <span class="wl-chg wl-loading" id="wl-chg-${i}">…</span>
+        <div style="display:flex;align-items:center;gap:4px">
+          <span id="wl-dot-${i}" style="font-size:8px;color:var(--t3)" title="Świeżość danych">●</span>
+          <span class="wl-chg wl-loading" id="wl-chg-${i}">…</span>
+        </div>
       </div>
       <div class="wl-price" id="wl-price-${i}">—</div>
       <div class="wl-name">${item.name}</div>
@@ -4087,7 +4127,7 @@ function renderWatchlist() {
 async function fetchYahooPrice(yahooSym) {
   const yUrl  = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(yahooSym)}?interval=1m&range=1d`;
   const proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(yUrl);
-  const resp  = await fetch(proxy, {signal: AbortSignal.timeout(8000)});
+  const resp  = await fetch(proxy, {signal: AbortSignal.timeout(15000)});
   if (!resp.ok) throw new Error(`Yahoo HTTP ${resp.status}`);
   const data  = await resp.json();
   const meta  = data?.chart?.result?.[0]?.meta;
@@ -4138,6 +4178,10 @@ async function fetchPrice(item) {
       return fetchYahooPrice('GC=F');
     }
   }
+
+  // Indices (DE40/DAX, UK100/FTSE, FR40/CAC, JP225/Nikkei…) → Yahoo Finance
+  const idxSym = INDICES_MAP[sym];
+  if (idxSym) return fetchYahooPrice(decodeURIComponent(idxSym));
 
   // Futures (NQ, ES, CL, SI, NG, RTY, YM…) → Yahoo Finance via proxy
   const yahooSym = FUTURES_MAP[sym];
@@ -4228,6 +4272,7 @@ async function refreshWatchlistPrices() {
     const tsEl    = document.getElementById('wl-ts-'    + i);
     if (!priceEl || !chgEl) return;
 
+    const dotEl = document.getElementById('wl-dot-' + i);
     try {
       const {price, changePct} = await fetchPrice(item);
       wlSaveLastPrice(item.sym, price, changePct);
@@ -4237,22 +4282,26 @@ async function refreshWatchlistPrices() {
       chgEl.textContent = (up ? '+' : '') + changePct.toFixed(2) + '%';
       chgEl.className   = 'wl-chg ' + (up ? 'chg-p' : 'chg-n');
       if (tsEl) tsEl.textContent = new Date().toLocaleTimeString('pl', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+      if (dotEl) { dotEl.textContent = '●'; dotEl.style.color = 'var(--green)'; dotEl.title = 'Live'; }
     } catch {
       const last = wlGetLastPrice(item.sym);
       if (last) {
         priceEl.textContent = formatWlPrice(last.price);
-        const stale = (Date.now() - last.ts) > 5 * 60 * 1000;
-        if (stale) {
+        const ageMs = Date.now() - last.ts;
+        if (ageMs > 5 * 60 * 1000) {
           priceEl.classList.add('wl-price-offline');
           chgEl.textContent = 'Offline';
           chgEl.className   = 'wl-chg chg-off';
           if (tsEl) tsEl.textContent = `ostatnia: ${new Date(last.ts).toLocaleTimeString('pl', {hour:'2-digit', minute:'2-digit'})}`;
+          if (dotEl) { dotEl.textContent = '●'; dotEl.style.color = 'var(--red)'; dotEl.title = 'Offline >5min'; }
         } else {
           priceEl.classList.remove('wl-price-offline');
           const up = last.changePct >= 0;
           chgEl.textContent = (up ? '+' : '') + last.changePct.toFixed(2) + '%';
           chgEl.className   = 'wl-chg ' + (up ? 'chg-p' : 'chg-n');
           if (tsEl) tsEl.textContent = new Date(last.ts).toLocaleTimeString('pl', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+          const dot = ageMs > 2 * 60 * 1000 ? {c:'var(--amber)',t:'Stale 2-5min'} : {c:'var(--green)',t:'Live (<2min)'};
+          if (dotEl) { dotEl.textContent = '●'; dotEl.style.color = dot.c; dotEl.title = dot.t; }
         }
       } else {
         priceEl.textContent = '—';
@@ -4260,6 +4309,7 @@ async function refreshWatchlistPrices() {
         chgEl.textContent = 'ERR';
         chgEl.className   = 'wl-chg chg-n';
         if (tsEl) tsEl.textContent = '';
+        if (dotEl) { dotEl.textContent = '●'; dotEl.style.color = 'var(--t3)'; dotEl.title = 'Brak danych'; }
       }
     }
   }));
@@ -4287,7 +4337,11 @@ function addInstrument() {
   if (!ov) return;
   document.getElementById('wl-new-sym').value  = '';
   document.getElementById('wl-new-name').value = '';
-  document.getElementById('wl-api-hint').textContent = 'Crypto (BTC,ETH…): Binance • Futures/Stocks/Forex: Yahoo Finance';
+  document.getElementById('wl-api-hint').textContent = 'Crypto (BTC,ETH…): Binance · Futures: Yahoo · Indeksy: Yahoo';
+  const sugg = document.getElementById('wl-suggestions');
+  if (sugg) sugg.style.display = 'none';
+  const btn = document.querySelector('#wl-overlay .btn-primary');
+  if (btn) { btn.disabled = false; btn.textContent = 'DODAJ DO WATCHLIST'; }
   document.querySelectorAll('.wl-color-opt').forEach((el,i) => el.classList.toggle('selected', i === 0));
   ov.classList.add('open');
   setTimeout(() => document.getElementById('wl-new-sym').focus(), 100);
@@ -4301,26 +4355,84 @@ function selectWlColor(el) {
 }
 
 function wlSymInput(input) {
-  input.value = input.value.toUpperCase();
+  input.value = input.value.toUpperCase().replace(/\s/g, '');
   const sym = input.value.trim();
   const nameEl = document.getElementById('wl-new-name');
-  if (nameEl && KNOWN_NAMES[sym]) nameEl.value = KNOWN_NAMES[sym];
+  if (nameEl && sym && KNOWN_NAMES[sym]) nameEl.value = KNOWN_NAMES[sym];
   const hint = document.getElementById('wl-api-hint');
-  if (hint && sym) {
-    const cfg = detectApiConfig(sym);
-    hint.textContent = '✓ Finnhub: ' + cfg.apiSym;
+  const sugg = document.getElementById('wl-suggestions');
+
+  if (sym) {
+    const q = sym.toLowerCase();
+    const matches = WL_SUGGESTIONS.filter(s =>
+      s.sym.toLowerCase().startsWith(q) || s.name.toLowerCase().includes(q)
+    ).slice(0, 8);
+    if (sugg) {
+      if (matches.length) {
+        sugg.style.display = 'block';
+        sugg.innerHTML = matches.map(s =>
+          `<div onclick="wlSelectSuggestion('${s.sym}','${s.name.replace(/'/g,"\\'")}')"
+               style="padding:8px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid var(--border)33;display:flex;justify-content:space-between;align-items:center"
+               onmouseover="this.style.background='var(--bg4)'" onmouseout="this.style.background=''">
+            <span><strong style="color:var(--cyan);font-family:var(--mono)">${s.sym}</strong> <span style="color:var(--t2);margin-left:6px">${s.name}</span></span>
+            <span style="font-size:10px;color:var(--t3);font-family:var(--mono)">${s.hint}</span>
+          </div>`
+        ).join('');
+      } else {
+        sugg.style.display = 'none';
+      }
+    }
+    if (hint) {
+      const src = INDICES_MAP[sym] ? `Yahoo: ${decodeURIComponent(INDICES_MAP[sym])}` :
+                  FUTURES_MAP[sym] ? `Yahoo: ${FUTURES_MAP[sym]}` :
+                  CRYPTO_SYMS.has(sym) ? 'Binance' :
+                  FOREX_SUBS[sym] ? `Yahoo: ${FOREX_SUBS[sym]}` : 'Yahoo / Finnhub';
+      hint.textContent = `✓ Źródło: ${src}`;
+    }
+  } else {
+    if (sugg) sugg.style.display = 'none';
+    if (hint) hint.textContent = 'Crypto (BTC,ETH…): Binance · Futures: Yahoo · Indeksy: Yahoo';
   }
 }
 
-function saveInstrument() {
-  const sym = (document.getElementById('wl-new-sym').value || '').trim().toUpperCase();
-  if (!sym) { document.getElementById('wl-new-sym').focus(); return; }
+function wlSelectSuggestion(sym, name) {
+  const symEl  = document.getElementById('wl-new-sym');
+  const nameEl = document.getElementById('wl-new-name');
+  const sugg   = document.getElementById('wl-suggestions');
+  const hint   = document.getElementById('wl-api-hint');
+  if (symEl)  symEl.value  = sym;
+  if (nameEl) nameEl.value = name;
+  if (sugg)   sugg.style.display = 'none';
+  const s = WL_SUGGESTIONS.find(x => x.sym === sym);
+  if (hint) hint.textContent = s ? `✓ ${s.hint}` : '✓ Wykryto źródło';
+}
+
+async function saveInstrument() {
+  const symEl = document.getElementById('wl-new-sym');
+  const sym = (symEl?.value || '').trim().toUpperCase();
+  if (!sym) { symEl?.focus(); return; }
+  document.getElementById('wl-suggestions')?.style && (document.getElementById('wl-suggestions').style.display = 'none');
   const name = (document.getElementById('wl-new-name').value || '').trim() || sym;
   const colorEl = document.querySelector('.wl-color-opt.selected');
   const color = colorEl ? colorEl.dataset.color : 'var(--t2)';
   const cfg = detectApiConfig(sym);
   const items = getWatchlist();
   if (items.some(x => x.sym === sym)) { closeWlModal(); return; }
+
+  const btn  = document.querySelector('#wl-overlay .btn-primary');
+  const hint = document.getElementById('wl-api-hint');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sprawdzam cenę…'; }
+  try {
+    const {price} = await fetchPrice({sym, ...cfg});
+    const fmt = p => p >= 1000 ? p.toLocaleString('en-US',{maximumFractionDigits:0}) : p >= 10 ? p.toFixed(2) : p.toFixed(4);
+    if (btn) btn.textContent = `✓ Cena: ${fmt(price)} — Dodaję…`;
+    if (hint) hint.textContent = `✓ Pobrano cenę: ${fmt(price)}`;
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'DODAJ DO WATCHLIST'; }
+    if (hint) hint.textContent = `⚠ Cena niedostępna (${e.message}) — możesz dodać mimo to`;
+    if (!confirm(`Nie udało się pobrać ceny dla ${sym}.\n${e.message}\n\nDodać do Watchlist mimo to?`)) return;
+  }
+
   items.push({sym, name, color, ...cfg});
   saveWatchlist(items);
   closeWlModal();
