@@ -4337,7 +4337,11 @@ function addInstrument() {
   if (!ov) return;
   document.getElementById('wl-new-sym').value  = '';
   document.getElementById('wl-new-name').value = '';
-  document.getElementById('wl-api-hint').textContent = 'Crypto (BTC,ETH…): Binance • Futures/Stocks/Forex: Yahoo Finance';
+  document.getElementById('wl-api-hint').textContent = 'Crypto (BTC,ETH…): Binance · Futures: Yahoo · Indeksy: Yahoo';
+  const sugg = document.getElementById('wl-suggestions');
+  if (sugg) sugg.style.display = 'none';
+  const btn = document.querySelector('#wl-overlay .btn-primary');
+  if (btn) { btn.disabled = false; btn.textContent = 'DODAJ DO WATCHLIST'; }
   document.querySelectorAll('.wl-color-opt').forEach((el,i) => el.classList.toggle('selected', i === 0));
   ov.classList.add('open');
   setTimeout(() => document.getElementById('wl-new-sym').focus(), 100);
@@ -4403,15 +4407,32 @@ function wlSelectSuggestion(sym, name) {
   if (hint) hint.textContent = s ? `✓ ${s.hint}` : '✓ Wykryto źródło';
 }
 
-function saveInstrument() {
-  const sym = (document.getElementById('wl-new-sym').value || '').trim().toUpperCase();
-  if (!sym) { document.getElementById('wl-new-sym').focus(); return; }
+async function saveInstrument() {
+  const symEl = document.getElementById('wl-new-sym');
+  const sym = (symEl?.value || '').trim().toUpperCase();
+  if (!sym) { symEl?.focus(); return; }
+  document.getElementById('wl-suggestions')?.style && (document.getElementById('wl-suggestions').style.display = 'none');
   const name = (document.getElementById('wl-new-name').value || '').trim() || sym;
   const colorEl = document.querySelector('.wl-color-opt.selected');
   const color = colorEl ? colorEl.dataset.color : 'var(--t2)';
   const cfg = detectApiConfig(sym);
   const items = getWatchlist();
   if (items.some(x => x.sym === sym)) { closeWlModal(); return; }
+
+  const btn  = document.querySelector('#wl-overlay .btn-primary');
+  const hint = document.getElementById('wl-api-hint');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sprawdzam cenę…'; }
+  try {
+    const {price} = await fetchPrice({sym, ...cfg});
+    const fmt = p => p >= 1000 ? p.toLocaleString('en-US',{maximumFractionDigits:0}) : p >= 10 ? p.toFixed(2) : p.toFixed(4);
+    if (btn) btn.textContent = `✓ Cena: ${fmt(price)} — Dodaję…`;
+    if (hint) hint.textContent = `✓ Pobrano cenę: ${fmt(price)}`;
+  } catch(e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'DODAJ DO WATCHLIST'; }
+    if (hint) hint.textContent = `⚠ Cena niedostępna (${e.message}) — możesz dodać mimo to`;
+    if (!confirm(`Nie udało się pobrać ceny dla ${sym}.\n${e.message}\n\nDodać do Watchlist mimo to?`)) return;
+  }
+
   items.push({sym, name, color, ...cfg});
   saveWatchlist(items);
   closeWlModal();
